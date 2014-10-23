@@ -4,8 +4,9 @@
 \title{Train a iterative one-class classifier.}
 \usage{
 iterativeOcc(train_pos, un, iter_max = 10, n_train_un = nrow(train_pos) * 2,
-  k = 10, indep_un = 0.5, folder_out = "resultsOfIterativeOcc",
-  test_set = NULL, seed = NULL)
+  k = 10, indep_un = 0.5, expand = 2,
+  folder_out = "resultsOfIterativeOcc", test_set = NULL, seed = NULL,
+  scale = TRUE)
 }
 \arguments{
 \item{train_pos}{a data frame with the positive training samples.}
@@ -19,6 +20,8 @@ iterativeOcc(train_pos, un, iter_max = 10, n_train_un = nrow(train_pos) * 2,
 \item{k}{the number of folds used for resampling.}
 
 \item{indep_un}{the fraction of unlabeled samples used for validation.}
+
+\item{expand}{...}
 
 \item{folder_out}{a folder where the results are written to.}
 

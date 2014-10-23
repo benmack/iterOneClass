@@ -30,7 +30,7 @@ iterativeOcc <- function (train_pos, un,
   }
   
   n_un <- length(un$validCells)
-  npixelsPerTile <- un$tiles[2,1]
+  nPixelsPerTile <- un$tiles[2,1]
   
   if (!is.null(seed))
     seed_global <- seed
@@ -46,7 +46,7 @@ iterativeOcc <- function (train_pos, un,
   
   validCells <- un$validCells
   
-  save(n_un, npixelsPerTile, validCells, seed_global, fname, 
+  save(n_un, nPixelsPerTile, validCells, seed_global, fname, 
        file=fname(folder_out, 0, ".RData", "initialized") )
   
   ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
@@ -65,7 +65,7 @@ iterativeOcc <- function (train_pos, un,
       seed <- round(runif(1, 1, 1000000), 0)
     }
     
-    sprintf("Iteration: %d / Percent unlabeled: %2.2f", iter, (n_un_iter/n_un)*100 )
+    cat(sprintf("Iteration: %d - Percent unlabeled: %2.2f", iter, (n_un_iter/n_un)*100 ), "\n")
     
     ### classification
     train_un <- sample_rasterTiled(un, size=n_train_un, seed=seed)
@@ -92,6 +92,10 @@ iterativeOcc <- function (train_pos, un,
                      test_set[pred_in_pred_neg_test, -1])
       pred_test <- rep(1+min(ans), nrow(test_set))
       pred_test[pred_in_pred_neg_test] <- ans
+      
+      new_neg_in_pred_neg_test <- pred_in_pred_neg_test[pred_test<th]
+      pred_neg_test[ new_neg_in_pred_neg_test ] <- iter
+
       ev <- evaluate(p = pred_test[test_set$y==1], 
                      a = pred_test[test_set$y==-1])
     }
@@ -132,21 +136,20 @@ iterativeOcc <- function (train_pos, un,
     
     ### change
     
+    # update un
+    un <- rasterTiled(un$raster, 
+                       mask=un$validCells[pred>=th], 
+                       nPixelsPerTile = nPixelsPerTile)
     
     ### save results of this iteration
     save(iter, model, pred, th, pred_neg, pred_neg_test, ev, 
          seed_global, seed, 
          file=fname(folder_out, iter, ".RData", "results") )
+    rm(model, pred, th, ev, seed, n_un_iter, train_un,
+       train_pu_x, train_pu_y)
     
     if (iter==iter_max)
-      STOP=TRUE
-    
-    # update un
-    un_bu <- un
-    un <- rasterTiled(un$raster, 
-                       mask=un$validCells[pred>=th], 
-                       nPixelsPerTile = nPixelsPerTile)
-  
+      STOP=TRUE  
   }
   
   return(un)

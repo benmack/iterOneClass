@@ -3,5 +3,6 @@
 export(.banana_trn_pos)
 export(.banana_tst_set)
 export(iterativeOcc)
+export(scale_data)
 export(thresholdNu)
 export(trainIterOcc)
