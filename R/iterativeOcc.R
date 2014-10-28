@@ -14,7 +14,7 @@
 #' @param ... other arguments that can be passed to \code{\link{trainOcc}}
 #' @export
 iterativeOcc <- function (train_pos, un, 
-                          iter_max = 10,
+                          iter_max = 'noChange',
                           n_train_un = nrow(train_pos)*2, 
                           k = 10, indep_un = 0.5, 
                           expand=2, 
@@ -41,11 +41,12 @@ iterativeOcc <- function (train_pos, un,
   }
   
   n_un <- length(un$validCells)
+  n_un_all_iters <- n_un
   nPixelsPerTile <- un$tiles[2,1]
   
   if (!is.null(seed))
     seed_global <- seed
-
+  
   dir.create(folder_out)
   
   pred_neg <- vector(mode="integer", length=n_un)
@@ -98,6 +99,12 @@ iterativeOcc <- function (train_pos, un,
     new_neg_in_pred_neg <- pred_in_pred_neg[pred<th]
     pred_neg[ new_neg_in_pred_neg ] <- iter
     
+    n_un_all_iters[iter+1] <- n_un_all_iters[iter]-length(new_neg_in_pred_neg)
+    
+    ### time
+    time_stopper <- rbind(time_stopper, proc.time())
+    
+    
     if (!is.null(test_set)) {
       cat("\tEvaluation ...\n")
       n_un_test_iter <- sum(pred_neg_test==0)
@@ -106,7 +113,7 @@ iterativeOcc <- function (train_pos, un,
       
       pred_in_pred_neg_test <- which(pred_neg_test==0)
       pred_test <- predict(model,
-                     test_set[pred_in_pred_neg_test, -1])
+                           test_set[pred_in_pred_neg_test, -1])
       new_neg_in_pred_neg_test <- pred_in_pred_neg_test[pred_test<th]
       pred_neg_test[ new_neg_in_pred_neg_test ] <- iter
       
@@ -155,9 +162,18 @@ iterativeOcc <- function (train_pos, un,
       dev.off()
     }
     
-    ### change
-    time_stopper <- rbind(time_stopper, proc.time())
+    ### change plots
+    pdf(.fname(folder_out, 0, ".pdf", "_n_unlabeled"))
+      plot(1:(iter+1), n_un_all_iters, type="b", 
+           xlab="iteration", ylab="# unlabeled", log="y")
+    dev.off()
+    pdf(.fname(folder_out, 0, ".pdf", "_time"))
+      plot(1:(iter), diff(time_stopper[, "elapsed"]), 
+           type="b", xlab="iteration", 
+           ylab="time [s]")
+    dev.off()
     
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # update un
     un <- rasterTiled(un$raster, 
                       mask=un$validCells[pred>=th], 
@@ -167,18 +183,41 @@ iterativeOcc <- function (train_pos, un,
     save(iter, model, pred, th, pred_neg, pred_neg_test, ev, 
          seed_global, seed, time_stopper, 
          file=.fname(folder_out, iter, ".RData", "results") )
-    rm(model, pred, th, ev, seed, n_un_iter, train_un,
-       train_pu_x, train_pu_y)
     
-    if (iter==iter_max)
-      STOP = TRUE  
+    if (is.character(iter_max)) {
+      if ( iter_max=="noChange" & 
+             length(new_neg_in_pred_neg)==0 )
+        STOP=TRUE
+    } else if (is.numeric(iter)) {
+      if (iter==iter_max)
+        STOP = TRUE  
+    } else {
+      rm(model, pred, th, ev, seed, n_un_iter, train_un,
+       train_pu_x, train_pu_y)
+    }
+    
     
     cat(sprintf("\t%2.2f real and %2.2f CPU time required.", 
                 (time_stopper[iter+1, , drop=FALSE]-
                    time_stopper[iter, , drop=FALSE])[,"elapsed"], 
                 (time_stopper[iter+1, , drop=FALSE]-
                    time_stopper[iter, , drop=FALSE])[,"sys.self"]
-                ), "\n")
+    ), "\n")
   }
-  return(un)
+  
+  return( 
+    list(un = un,
+         iter=iter, 
+         model=model, 
+         pred=pred, 
+         th=th, 
+         pred_neg=pred_neg, 
+         pred_neg_test=pred_neg_test, 
+         ev=ev, 
+         seed_global=seed_global, 
+         seed=seed, 
+         time_stopper=time_stopper, 
+         file=.fname(folder_out, iter, ".RData", "results")
+    )
+  )
 }

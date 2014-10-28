@@ -53,8 +53,8 @@ PN <- .banana_tst_set(banana, n_test, seed=seed)
 try(stopCluster(cl))
 cl <- makeCluster(detectCores())
 registerDoParallel(cl)
-un <- iterativeOcc(P, U, 
-                   iter_max = iter_max,
+results <- iterativeOcc(P, U, 
+                   iter_max = 'noChange',
                    n_train_un = n_train_un, 
                    k = k, indep_un = indep_un,  
                    expand=expand,
@@ -63,8 +63,26 @@ un <- iterativeOcc(P, U,
                    seed=123)
 
 ############################################################
+### 
+
+
+
+
+############################################################
+require(logspline)
+
 iter=7
 results_iter <- load_iterativeOcc( folder_out, iter=7)
-str(results_iter)
+attach(results_iter)
+U <- rasterTiled(x = U$raster, mask = 
+                   validCells[pred_neg==0 | pred_neg == iter])
 
+write_hist(model, U, modRows=NULL, thDepPerf=TRUE, 
+           folder_out = paste("ignore/hists_iter-", iter, sep="")) 
+
+subU <- sample_rasterTiled(U, 1000, seed=seed)
+pred_subU <- predict(model, subU)
+dens_subU <- logspline(pred_subU)
+hist(model, pred_subU)
+plot(dens_subU, add=TRUE)
 
