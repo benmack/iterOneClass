@@ -29,7 +29,7 @@ k = 10
 n_test <- 10000
 seed <- 123
 folder_out <- "ignore"
-nPixelsPerTile <- 100000
+nPixelsPerTile <- 10000
 expand <- 4
 iter_max <- 10
 
@@ -50,11 +50,8 @@ U <- rasterTiled(banana$x, nPixelsPerTile = nPixelsPerTile)
 ### the cell values in un$raster 
 PN <- .banana_tst_set(banana, n_test, seed=seed)
 
-try(stopCluster(cl))
-cl <- makeCluster(detectCores())
-registerDoParallel(cl)
 results <- iterativeOcc(P, U, 
-                   iter_max = 'noChange',
+                   iter_max = 'noChange+5',
                    n_train_un = n_train_un, 
                    k = k, indep_un = indep_un,  
                    expand=expand,
@@ -63,16 +60,10 @@ results <- iterativeOcc(P, U,
                    seed=123)
 
 ############################################################
-### 
-
-
-
-
-############################################################
 require(logspline)
 
-iter=7
-results_iter <- load_iterativeOcc( folder_out, iter=7)
+iter=5
+results_iter <- load_iterativeOcc( folder_out, iter=iter)
 attach(results_iter)
 U <- rasterTiled(x = U$raster, mask = 
                    validCells[pred_neg==0 | pred_neg == iter])

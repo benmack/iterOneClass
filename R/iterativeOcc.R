@@ -62,6 +62,9 @@ iterativeOcc <- function (train_pos, un,
   STOP = FALSE
   
   time_stopper <- proc.time()
+  time_stopper_model <- time_stopper_predict <- c()
+  
+  
   while(!STOP) {
     
     iter <- iter + 1
@@ -76,7 +79,8 @@ iterativeOcc <- function (train_pos, un,
     cat(sprintf("Iteration: %d \n\tPercent unlabeled: %2.2f", iter, (n_un_iter/n_un)*100 ), "\n")
     
     ### classification
-    cat("\tTraining ...\n")
+    cat("\tTraining ... ")
+    ans <- proc.time()
     train_un <- sample_rasterTiled(un, size=n_train_un, seed=seed)
     train_pu_x <- rbind(train_pos, train_un)
     train_pu_y <- puFactor(rep(c(1, 0), 
@@ -85,13 +89,20 @@ iterativeOcc <- function (train_pos, un,
     index <- createFoldsPu( train_pu_y, k=k, 
                             indepUn=indep_un, seed=seed )
     
-    model <- trainOcc(x=train_pu_x, y=train_pu_y, index=index, ...)
+      model <- trainOcc(x=train_pu_x, y=train_pu_y, index=index, ...)
+    time_stopper_model <- rbind(time_stopper_model, (proc.time()-ans)[1:3])
+    cat("Completed in", time_stopper_model[iter, 3], "sec.\n")
     
-    cat("\tPrediction ...\n")
+    
+    cat("\tPrediction ... ")
+    ans <- proc.time()
     pred <- predict(un, model, returnRaster = FALSE, 
                     fnameLog = paste(paste(folder_out, 
                                            "/log_prediction_iter-", 
                                            iter, ".txt", sep="") ) )
+    
+    time_stopper_predict <- rbind(time_stopper_predict, (proc.time()-ans)[1:3])
+    cat("Completed in", time_stopper_predict[iter, 3], "sec.\n")
     
     th <- thresholdNu(model, pred, expand=expand)
     
@@ -106,7 +117,7 @@ iterativeOcc <- function (train_pos, un,
     
     
     if (!is.null(test_set)) {
-      cat("\tEvaluation ...\n")
+      cat("\tEvaluation ... ")
       n_un_test_iter <- sum(pred_neg_test==0)
       cat(sprintf("\tPercent unlabeled (test): %2.2f", 
                   (n_un_test_iter/nrow(test_set))*100 ), "\n")
@@ -126,6 +137,8 @@ iterativeOcc <- function (train_pos, un,
     }
     
     ### plot diagnostics
+    cat("\tWriting results in folder ", folder_out)
+      
     param_as_str <- paste(colnames(signif(model$bestTune)), 
                           model$bestTune, sep=": ", 
                           collapse=" | ")
@@ -163,9 +176,13 @@ iterativeOcc <- function (train_pos, un,
     }
     
     ### change plots
+    dff <- abs(diff(n_un_all_iters))
+    
     pdf(.fname(folder_out, 0, ".pdf", "_n_unlabeled"))
       plot(1:(iter+1), n_un_all_iters, type="b", 
            xlab="iteration", ylab="# unlabeled", log="y")
+      text(2:(iter+1), n_un_all_iters[2:(iter+1)], 
+           label = paste("d:", dff), pos=c(3))    
     dev.off()
     pdf(.fname(folder_out, 0, ".pdf", "_time"))
       plot(1:(iter), diff(time_stopper[, "elapsed"]), 
@@ -181,12 +198,20 @@ iterativeOcc <- function (train_pos, un,
     
     ### save results of this iteration
     save(iter, model, pred, th, pred_neg, pred_neg_test, ev, 
-         seed_global, seed, time_stopper, 
+         seed_global, seed, 
+         time_stopper, time_stopper_model, time_stopper_predict,
          file=.fname(folder_out, iter, ".RData", "results") )
     
     if (is.character(iter_max)) {
+      # iter of no change
+      if (grep("+", iter_max)==1) {
+        nSeqNoChangeCrit <- as.numeric(strsplit(iter_max, "[+]")[[1]][2])
+        nSeqNoChange <- sum(dff[ max(1, iter-nSeqNoChangeCrit+1) : iter ] == 0)
+        if (nSeqNoChange >= nSeqNoChangeCrit)
+          STOP=TRUE
+      }
       if ( iter_max=="noChange" & 
-             length(new_neg_in_pred_neg)==0 )
+             dff[iter]==0 )
         STOP=TRUE
     } else if (is.numeric(iter)) {
       if (iter==iter_max)
@@ -217,6 +242,8 @@ iterativeOcc <- function (train_pos, un,
          seed_global=seed_global, 
          seed=seed, 
          time_stopper=time_stopper, 
+         time_stopper_model=time_stopper_model, 
+         time_stopper_predict=time_stopper_predict,
          file=.fname(folder_out, iter, ".RData", "results")
     )
   )
