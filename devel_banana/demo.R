@@ -1,5 +1,5 @@
-rm(list=ls())
-ls()
+### --------------------------------------------------------
+### PACKAGES AND FUNCTIONS
 require(oneClass)
 require(kernlab)
 require(pROC)
@@ -10,54 +10,75 @@ require(doParallel)
 require(dismo)
 require(miscRfunctions)
 
-require(devtools)
-load_all()
-ls()
+# require(devtools)
+# load_all()
+# ls()
 
-# install_git("benmack/iterativeOcc")
+### --------------------------------------------------------
+### SETTINGS
+### Make you settings controling the workflow here...
 
-# register parallel backend
-try(stopCluster(cl))
-cl <- makeCluster(detectCores())
-registerDoParallel(cl)
+fname <- function(exp=, iter=NULL, method=NULL, ...)
+  paste0(exp, "/", ifelse(is.null(iter), "", 
+                          paste0("i", iter) ), 
+  )
 
+sttngs <- list(n_train_pos = 20,
+               n_train_un = 100,
+               iter_max = "noChange+3",
+               indep_un = .5,
+               k = 10,
+               n_test = 10000,
+               seed = 123,
+               exp = "ignore",
+               nPixelsPerTile = 10000,
+               expand = 4)
+
+### --------------------------------------------------------
+### DATA
+### Output: P, PN (optional), U
 data(banana)
-n_train_pos <- 20
-n_train_un <- 100
-indep_un <- .5
-k = 10
-n_test <- 10000
-seed <- 123
-folder_out <- "ignore"
-nPixelsPerTile <- 10000
-expand <- 4
-iter_max <- 10
+P <- .banana_trn_pos(banana, sttngs$n_train_pos, sttngs$seed)
+banana$x <- raster_scale(x=banana$x, 
+                         rng.in=c(0, 1), 
+                         rng.out=c(-1,1), 
+                         cut.tails=FALSE, 
+                         rng.in.from=as.numeric(rownames(P)))
+P <- banana$x[][as.numeric(rownames(P)), ]
+U <- rasterTiled(banana$x, nPixelsPerTile=sttngs$nPixelsPerTile)
+### it is important that the rownames of test_set contain 
+### the cell values in un$raster
+PN <- .banana_tst_set(banana, sttngs$n_test, seed=sttngs$seed)
+
+### --------------------------------------------------------
+### run iocc
+cl <- my_registerDoParallel()
+iocc <- iterativeOcc(P, U, 
+                     iter_max = sttngs$iter_max,
+                     n_train_un = sttngs$n_train_un, 
+                     k = sttngs$k, indep_un = sttngs$indep_un,  
+                     expand=sttngs$expand,
+                     base_dir="ignore",
+                     test_set=PN, 
+                     seed=123)
+
+### --------------------------------------------------------
+### for the demo the image is required as raster on disc
+filename_U <- iocc_filename("ignore", 0, "_banana.tif")
+writeRaster(U$raster, filename_U)
+
+### --------------------------------------------------------
+### go to iteration iter
+iocc.i <- iocc_load(base_dir, iter, 
+                   filename_U=filename_U)
+
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 ### input
 
-P <- .banana_trn_pos(banana, n_train_pos, seed)
-banana$x <- raster_scale(x=banana$x, 
-                       rng.in=c(0, 1), 
-                       rng.out=c(-1,1), 
-                       cut.tails=FALSE, 
-                       rng.in.from=as.numeric(rownames(P)))
-P <- banana$x[][as.numeric(rownames(P)), ]
+system.file("data/banana.rda", package="oneClass")
 
-U <- rasterTiled(banana$x, nPixelsPerTile = nPixelsPerTile)
 
-### it is important that the rownames of test_set contain 
-### the cell values in un$raster 
-PN <- .banana_tst_set(banana, n_test, seed=seed)
-
-results <- iterativeOcc(P, U, 
-                   iter_max = 'noChange+5',
-                   n_train_un = n_train_un, 
-                   k = k, indep_un = indep_un,  
-                   expand=expand,
-                   folder_out="ignore",
-                   test_set=PN, 
-                   seed=123)
 
 ############################################################
 require(logspline)

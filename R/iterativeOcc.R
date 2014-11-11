@@ -8,7 +8,7 @@
 #' @param k the number of folds used for resampling.
 #' @param indep_un the fraction of unlabeled samples used for validation.
 #' @param expand ...
-#' @param folder_out a folder where the results are written to.
+#' @param base_dir a folder where the results are written to.
 #' @param test_set a data frame used as independent test set. the first column must be the response variable with 1 being the positive and -1 the negative samples.
 #' @param seed a seed point to be set for sampling the unlabeled data and the
 #' @param ... other arguments that can be passed to \code{\link{trainOcc}}
@@ -18,17 +18,16 @@ iterativeOcc <- function (train_pos, un,
                           n_train_un = nrow(train_pos)*2, 
                           k = 10, indep_un = 0.5, 
                           expand=2, 
-                          folder_out=NULL,
+                          base_dir=NULL,
                           test_set=NULL, 
                           seed=NULL,
                           scale=TRUE, 
                           ...
 ) {
   
-  if (is.null(folder_out)) {
-    folder_out <- paste(tempdir(), "\\iterOneClass", sep="")
-    cat("\nSave results in ", folder_out, "\n\n")
-    dir.create(folder_out, showWarnings=FALSE)
+  if (is.null(base_dir)) {
+    base_dir <- paste(tempdir(), "\\iterOneClass", sep="")
+    cat("\nSave results in ", base_dir, "\n\n")
   }
   
   colors_pu<- list(pos='#2166ac', un='#e0e0e0') 
@@ -47,14 +46,14 @@ iterativeOcc <- function (train_pos, un,
   if (!is.null(seed))
     seed_global <- seed
   
-  dir.create(folder_out)
+  dir.create(base_dir, showWarnings=FALSE)
   
   pred_neg <- vector(mode="integer", length=n_un)
   
   validCells <- un$validCells
   
-  save(n_un, nPixelsPerTile, validCells, seed_global, .fname, 
-       file=.fname(folder_out, 0, ".RData", "initialized") )
+  save(n_un, nPixelsPerTile, validCells, seed_global, 
+       file=iocc_filename(base_dir, 0, "_ini.RData") )
   
   ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
   ### iterate 
@@ -97,9 +96,8 @@ iterativeOcc <- function (train_pos, un,
     cat("\tPrediction ... ")
     ans <- proc.time()
     pred <- predict(un, model, returnRaster = FALSE, 
-                    fnameLog = paste(paste(folder_out, 
-                                           "/log_prediction_iter-", 
-                                           iter, ".txt", sep="") ) )
+                    fnameLog = iocc_filename(base_dir, iter, 
+                                             "_log_prediction.txt"))
     
     time_stopper_predict <- rbind(time_stopper_predict, (proc.time()-ans)[1:3])
     cat("Completed in", time_stopper_predict[iter, 3], "sec.\n")
@@ -137,7 +135,7 @@ iterativeOcc <- function (train_pos, un,
     }
     
     ### plot diagnostics
-    cat("\tWriting results in folder ", folder_out)
+    cat("\tWriting results in folder ", base_dir)
       
     param_as_str <- paste(colnames(signif(model$bestTune)), 
                           model$bestTune, sep=": ", 
@@ -145,13 +143,13 @@ iterativeOcc <- function (train_pos, un,
     
     ### grid
     ans <- plot(model, plotType="level")
-    pdf(.fname(folder_out, iter, ".pdf", "grid"))
+    pdf(iocc_filename(base_dir, iter, "_grid.pdf"))
     trellis.par.set(caretTheme())
     print(ans)
     dev.off()
     
     ### histogram
-    pdf(.fname(folder_out, iter, ".pdf", "histogram"))
+    pdf(iocc_filename(base_dir, iter, "_histogram.pdf"))
     hist(model, pred, main=param_as_str)
     abline(v=c(th, attr(th, "th_non_expanded")))
     if (!is.null(test_set)) {
@@ -161,7 +159,7 @@ iterativeOcc <- function (train_pos, un,
     dev.off()
     ### featurespace
     if (ncol(train_pu_x)==2) {
-      pdf(.fname(folder_out, iter, ".pdf", "featurespace"))
+      pdf(iocc_filename(base_dir, iter, "_featurespace.pdf"))
       featurespace(model, 
                    thresholds=c(th, attr(th, "th_non_expanded")), 
                    main=param_as_str)
@@ -170,7 +168,7 @@ iterativeOcc <- function (train_pos, un,
     
     ### test
     if (!is.null(test_set)) {
-      pdf(.fname(folder_out, iter, ".pdf", "eval_pn"))
+      pdf(iocc_filename(base_dir, iter, "_eval_pn.pdf"))
       plot(ev, main=paste("max. Kappa:", round(max(ev@kappa), 2)))
       dev.off()
     }
@@ -178,13 +176,13 @@ iterativeOcc <- function (train_pos, un,
     ### change plots
     dff <- abs(diff(n_un_all_iters))
     
-    pdf(.fname(folder_out, 0, ".pdf", "_n_unlabeled"))
+    pdf(iocc_filename(base_dir, 0, "_n_unlabeled.pdf"))
       plot(1:(iter+1), n_un_all_iters, type="b", 
            xlab="iteration", ylab="# unlabeled", log="y")
       text(2:(iter+1), n_un_all_iters[2:(iter+1)], 
            label = paste("d:", dff), pos=c(3))    
     dev.off()
-    pdf(.fname(folder_out, 0, ".pdf", "_time"))
+    pdf(iocc_filename(base_dir, 0, "_time.pdf"))
       plot(1:(iter), diff(time_stopper[, "elapsed"]), 
            type="b", xlab="iteration", 
            ylab="time [s]")
@@ -200,7 +198,7 @@ iterativeOcc <- function (train_pos, un,
     save(iter, model, pred, th, pred_neg, pred_neg_test, ev, 
          seed_global, seed, 
          time_stopper, time_stopper_model, time_stopper_predict,
-         file=.fname(folder_out, iter, ".RData", "results") )
+         file=iocc_filename(base_dir, iter, "_results.RData") )
     
     if (is.character(iter_max)) {
       # iter of no change
@@ -244,7 +242,7 @@ iterativeOcc <- function (train_pos, un,
          time_stopper=time_stopper, 
          time_stopper_model=time_stopper_model, 
          time_stopper_predict=time_stopper_predict,
-         file=.fname(folder_out, iter, ".RData", "results")
+         file=iocc_filename(base_dir, iter, "_results.RData")
     )
   )
 }
