@@ -5,7 +5,7 @@
 \usage{
 iterativeOcc(train_pos, un, iter_max = "noChange",
   n_train_un = nrow(train_pos) * 2, k = 10, indep_un = 0.5, expand = 2,
-  folder_out = NULL, test_set = NULL, seed = NULL, scale = TRUE, ...)
+  base_dir = NULL, test_set = NULL, seed = NULL, scale = TRUE, ...)
 }
 \arguments{
 \item{train_pos}{a data frame with the positive training samples.}
@@ -22,7 +22,7 @@ iterativeOcc(train_pos, un, iter_max = "noChange",
 
 \item{expand}{...}
 
-\item{folder_out}{a folder where the results are written to.}
+\item{base_dir}{a folder where the results are written to.}
 
 \item{test_set}{a data frame used as independent test set. the first column must be the response variable with 1 being the positive and -1 the negative samples.}
 
