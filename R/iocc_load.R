@@ -13,10 +13,12 @@ iocc_load <- function(base_dir, iter,
   }
   
   if (!is.null(filename_U)) {
+    idx <- which(pred_neg==0)
+    U <- rasterTiled(brick(filename_U), idx)
     if (U_as_df) {
-      U <- extract_bandwise(filename_U, which(pred_neg_test==0))
+      U_df <- extract_bandwise(filename_U, idx)
     } else {
-      error("Only U_as_df is implemented yet.")
+      U_df=NULL
     }
   }
   
