@@ -80,6 +80,7 @@ iocc <- iterativeOcc(P, U,
                      seed=123)
 
 ### --------------------------------------------------------
+### --------------------------------------------------------
 ### get results of iteration iter
 cl <- my_registerDoParallel()
 iter=5
@@ -89,7 +90,7 @@ iocc.i <- iocc_load(sttngs$base_dir, iter,
 modelPosition(iocc.i$model)
 
 ### --------------------------------------------------------
-### get histogram plots of all models for some 
+### get histogram plots of all models 
 outdir <- paste0(iocc_filename(base_dir=sttngs$base_dir, 
                                iter=iter), "/otherModels/")
 
@@ -105,11 +106,26 @@ foreach(mm = 1:nrow(iocc.i$model$results),
                                           folder_out=outdir)
 
 
+### --------------------------------------------------------
+### get benchmark classification
+bsvm <- list()
+bsvm$outdir <- paste0(iocc_filename(base_dir=sttngs$base_dir, 
+                                    iter=iter), "/bsvm/")
+bsvm$nUn <- 
+  round(corresponding_samplesize_in_U(iocc.i$n_un, 
+                                      sum(iocc.i$pred_neg==0),
+                                      sttngs$n_train_un), 0)
+set.seed(sttngs$seed)
 
-### get histograms for all models of a given iteration
+bsvm$U_tr = sample_rasterTiled(U, bsvm$nUn, seed=sttngs$seed)
+bsvm$
+bsvm.model <- trainOcc(P)
 
-U_iter_df <- extract_bandwise(fname_image, U_cells )
-source("01b_ioc_allHistograms.R")
+
+
+
+
+
 
 
 
@@ -131,19 +147,3 @@ dens_subU <- logspline(pred_subU)
 hist(model, pred_subU)
 plot(dens_subU, add=TRUE)
 
-
-
-
-
-
-
-
-
-
-### benchmark classification
-bsvm.nUn <- 
-  round(corresponding_samplesize_in_U(iocc.i$n_un, 
-                                sum(iocc.i$pred_neg==0),
-                                sttngs$n_train_un), 0)
-
-bsvm.model <- trainOcc()
