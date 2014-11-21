@@ -5,7 +5,8 @@
 \usage{
 iterativeOcc(train_pos, un, iter_max = "noChange",
   n_train_un = nrow(train_pos) * 2, k = 10, indep_un = 0.5, expand = 2,
-  base_dir = NULL, test_set = NULL, seed = NULL, scale = TRUE, ...)
+  base_dir = NULL, test_set = NULL, seed = NULL, scale = TRUE,
+  minPppAtLw = FALSE, ...)
 }
 \arguments{
 \item{train_pos}{a data frame with the positive training samples.}

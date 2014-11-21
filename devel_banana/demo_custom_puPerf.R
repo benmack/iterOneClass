@@ -22,29 +22,30 @@ fname <- function(base_dir, iter=NULL, method=NULL, ...)
   paste0(base_dir, "/", ifelse(is.null(iter), "", 
                           paste0("i", iter) ), 
   )
-
+k =20
 sttngs <- list(n_train_pos = 20,
                n_train_un = 100,
                iter_max = "noChange+3",
                indep_un = .5,
-               k = 10,
+               k = k,
                n_test = 10000,
                seed = 123,
-               base_dir = "ignore/demo",
+               base_dir = "ignore/demo_minPppAtLw",
                nPixelsPerTile = 10000,
-               expand = 4)
+               expand = 3, 
+               minPppAtLw=TRUE)
 dir.create(sttngs$base_dir)
 
 sttngs.bsvm <- list(n_train_pos = 20,
                     n_train_un = 100,
-                   iter_max = "noChange+3",
                    indep_un = .5,
-                   k = 10,
+                   k = k,
                    n_test = 10000,
                    seed = 123,
-                   base_dir = "ignore/demo",
+                   base_dir = "ignore",
                    nPixelsPerTile = 10000,
                    expand = 4)
+
 
 ### --------------------------------------------------------
 ### DATA
@@ -78,7 +79,8 @@ iocc <- iterativeOcc(P, U,
                      expand=sttngs$expand,
                      base_dir=sttngs$base_dir,
                      test_set=PN, 
-                     seed=123)
+                     seed=123, 
+                     minPppAtLw=sttngs$minPppAtLw)
 
 ### --------------------------------------------------------
 ### --------------------------------------------------------

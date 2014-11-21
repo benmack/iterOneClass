@@ -22,6 +22,7 @@ iterativeOcc <- function (train_pos, un,
                           test_set=NULL, 
                           seed=NULL,
                           scale=TRUE, 
+                          minPppAtLw=FALSE,
                           ...
 ) {
   
@@ -87,8 +88,21 @@ iterativeOcc <- function (train_pos, un,
     
     index <- createFoldsPu( train_pu_y, k=k, 
                             indepUn=indep_un, seed=seed )
+    model <- trainOcc(x=train_pu_x, y=train_pu_y, index=index, ...)
+
+    if (minPppAtLw) {
+      # if (oneClass:::.foreach.exists()) { # ASSUMED
+        newMetrics <- foreach(mm=1:nrow(model$results),
+                              .combine=rbind,
+                              .packages="oneClass") %dopar%
+          pppAtLowerWhisker(model, modRow=mm)
+      # } else {...}
+      idx <- which.min(newMetrics[, 2])
+      model <- update(model, modRow=idx)
+      #hist(model)
+      #featurespace(model, thresholds=newMetrics[idx, 1])
+    }
     
-      model <- trainOcc(x=train_pu_x, y=train_pu_y, index=index, ...)
     time_stopper_model <- rbind(time_stopper_model, (proc.time()-ans)[1:3])
     cat("Completed in", time_stopper_model[iter, 3], "sec.\n")
     
@@ -103,7 +117,7 @@ iterativeOcc <- function (train_pos, un,
     cat("Completed in", time_stopper_predict[iter, 3], "sec.\n")
     
     th <- thresholdNu(model, pred, expand=expand)
-    
+  
     pred_in_pred_neg <- which(pred_neg==0)
     new_neg_in_pred_neg <- pred_in_pred_neg[pred<th]
     pred_neg[ new_neg_in_pred_neg ] <- iter
