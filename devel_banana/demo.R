@@ -18,31 +18,31 @@ ls()
 ### --------------------------------------------------------
 ### SETTINGS
 ### Make you settings controling the workflow here...
-fname <- function(base_dir, iter=NULL, method=NULL, ...)
-  paste0(base_dir, "/", ifelse(is.null(iter), "", 
+fname <- function(baseDir, iter=NULL, method=NULL, ...)
+  paste0(baseDir, "/", ifelse(is.null(iter), "", 
                           paste0("i", iter) ), 
   )
 
-sttngs <- list(n_train_pos = 20,
-               n_train_un = 100,
-               iter_max = "noChange+3",
-               indep_un = .5,
-               k = 10,
-               n_test = 10000,
+sttngs <- list(nTrainPos = 20,
+               nTrainUn = 100,
+               iterMax = "noChange+3",
+               indepUn = .5,
+               kFolds = 10,
+               nTest = 10000,
                seed = 123,
-               base_dir = "ignore/demo",
+               baseDir = "ignore/demo",
                nPixelsPerTile = 10000,
                expand = 4)
-dir.create(sttngs$base_dir)
+dir.create(sttngs$baseDir)
 
-sttngs.bsvm <- list(n_train_pos = 20,
-                    n_train_un = 100,
-                   iter_max = "noChange+3",
-                   indep_un = .5,
-                   k = 10,
-                   n_test = 10000,
+sttngs.bsvm <- list(nTrainPos = 20,
+                    nTrainUn = 100,
+                   iterMax = "noChange+3",
+                   indepUn = .5,
+                   kFolds = 10,
+                   nTest = 10000,
                    seed = 123,
-                   base_dir = "ignore/demo",
+                   baseDir = "ignore/demo",
                    nPixelsPerTile = 10000,
                    expand = 4)
 
@@ -51,7 +51,7 @@ sttngs.bsvm <- list(n_train_pos = 20,
 ### Output: P, PN (optional), U
 data(banana)
 
-P <- .banana_trn_pos(banana, sttngs$n_train_pos, sttngs$seed)
+P <- .banana_trn_pos(banana, sttngs$nTrainPos, sttngs$seed)
 banana$x <- raster_scale(x=banana$x, 
                          rng.in=c(0, 1), 
                          rng.out=c(-1,1), 
@@ -61,22 +61,22 @@ P <- banana$x[][as.numeric(rownames(P)), ]
 U <- rasterTiled(banana$x, nPixelsPerTile=sttngs$nPixelsPerTile)
 ### it is important that the rownames of test_set contain 
 ### the cell values in un$raster
-PN <- .banana_tst_set(banana, sttngs$n_test, seed=sttngs$seed)
+PN <- .banana_tst_set(banana, sttngs$nTest, seed=sttngs$seed)
 
 ### for the demo the image is required as raster on disc
-filename_U <- iocc_filename(sttngs$base_dir, 0, "_banana.tif")
+filename_U <- iocc_filename(sttngs$baseDir, 0, "_banana.tif")
 writeRaster(banana$x, filename_U, overwrite=TRUE)
 
 ### --------------------------------------------------------
 ### run iocc
 cl <- my_registerDoParallel()
 iocc <- iterativeOcc(P, U, 
-                     iter_max = sttngs$iter_max,
-                     n_train_un = sttngs$n_train_un, 
-                     k = sttngs$k, 
-                     indep_un = sttngs$indep_un,  
+                     iterMax = sttngs$iterMax,
+                     nTrainUn = sttngs$nTrainUn, 
+                     kFolds = sttngs$kFolds, 
+                     indepUn = sttngs$indepUn,  
                      expand=sttngs$expand,
-                     base_dir=sttngs$base_dir,
+                     baseDir=sttngs$baseDir,
                      test_set=PN, 
                      seed=123)
 
@@ -85,14 +85,14 @@ iocc <- iterativeOcc(P, U,
 ### get results of iteration iter
 cl <- my_registerDoParallel()
 iter=5
-iocc.i <- iocc_load(sttngs$base_dir, iter, 
+iocc.i <- iocc_load(sttngs$baseDir, iter, 
                     filename_U=filename_U)
 
 modelPosition(iocc.i$model)
 
 ### --------------------------------------------------------
 ### get histogram plots of all models 
-outdir <- paste0(iocc_filename(base_dir=sttngs$base_dir, 
+outdir <- paste0(iocc_filename(baseDir=sttngs$baseDir, 
                                iter=iter), "/otherModels/")
 
 modelPosition(iocc.i$model)
@@ -110,12 +110,12 @@ foreach(mm = 1:nrow(iocc.i$model$results),
 ### --------------------------------------------------------
 ### get benchmark classification
 bsvm <- list()
-bsvm$outdir <- paste0(iocc_filename(base_dir=sttngs$base_dir, 
+bsvm$outdir <- paste0(iocc_filename(baseDir=sttngs$baseDir, 
                                     iter=iter), "/bsvm/")
 bsvm$nUn <- 
   round(corresponding_samplesize_in_U(iocc.i$n_un, 
                                       sum(iocc.i$pred_neg==0),
-                                      sttngs$n_train_un), 0)
+                                      sttngs$nTrainUn), 0)
 set.seed(sttngs$seed)
 
 bsvm$U_tr = sample_rasterTiled(U, bsvm$nUn, seed=sttngs$seed)

@@ -91,17 +91,24 @@ iterativeOcc <- function (train_pos, un,
     model <- trainOcc(x=train_pu_x, y=train_pu_y, index=index, ...)
 
     if (minPppAtLw) {
+      cat("threshold at lower-whisker ... ")
       # if (oneClass:::.foreach.exists()) { # ASSUMED
         newMetrics <- foreach(mm=1:nrow(model$results),
                               .combine=rbind,
                               .packages="oneClass") %dopar%
           pppAtLowerWhisker(model, modRow=mm)
-      # } else {...}
-      idx <- which.min(newMetrics[, 2])
-      model <- update(model, modRow=idx)
+      
+      
+      newMetrics <- data.frame(newMetrics, 1-newMetrics[, 2])
+      colnames(newMetrics) <- c('thAtLw', 'pppAtLw', 'pnpAtLw')
+      
+      model$results <- cbind(model$results, newMetrics)
+      
+      model <- update(model, modRank=1, metric="pnpAtLw")
+      
       #hist(model)
       #featurespace(model, thresholds=newMetrics[idx, 1])
-    }
+   }
     
     time_stopper_model <- rbind(time_stopper_model, (proc.time()-ans)[1:3])
     cat("Completed in", time_stopper_model[iter, 3], "sec.\n")
@@ -149,7 +156,7 @@ iterativeOcc <- function (train_pos, un,
     }
     
     ### plot diagnostics
-    cat("\tWriting results in folder ", base_dir)
+    cat("\n\tWriting results in folder ", base_dir)
       
     param_as_str <- paste(colnames(signif(model$bestTune)), 
                           model$bestTune, sep=": ", 
@@ -210,7 +217,7 @@ iterativeOcc <- function (train_pos, un,
     
     ### save results of this iteration
     save(iter, model, pred, th, pred_neg, pred_neg_test, ev, 
-         seed_global, seed, 
+         n_un_all_iters, seed_global, seed, 
          time_stopper, time_stopper_model, time_stopper_predict,
          file=iocc_filename(base_dir, iter, "_results.RData") )
     

@@ -21,7 +21,7 @@ iocc_load <- function(base_dir, iter,
       U_df=NULL
     }
   }
-  
+  n_un_iter <- sum(pred_neg==0)
   namesList <- ls()
   objList <- list()
   for (i in 1:length(namesList))
