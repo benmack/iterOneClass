@@ -1,7 +1,7 @@
 #'@export
 one_step_occ <- function(sttngs, iter, filename_U, test_set,
                          folder_out, allowParallel=TRUE,
-                         modRows = 0) {
+                         modRows = 0, modRows_iocc=NULL) {
   
   time_stopper_model <- time_stopper_predict <- c()
   
@@ -117,16 +117,26 @@ one_step_occ <- function(sttngs, iter, filename_U, test_set,
       yLimits = histUev(model, ev, pred=pred)
       abline(h=max(yLimits)*max(iocc.i$ev@kappa), lwd=2)
       dev.off()
-      ### Hist plot and ev of iocc
-      pdf(file=gsub("WHAT", "histUev_iocc", fname_plot))
-      yLimits = histUev(iocc.i$model, iocc.i$ev, pred=iocc.i$pred)
-      abline(h=max(yLimits)*max(ev@kappa), lwd=2)
-      dev.off()
       
-      ### Comparing predictions
-      pred_iocc_all <- get_full_pred_vector(iocc.i)
-      hist2d(pred, pred_iocc_all, fname=gsub("WHAT", "hist2d", 
-                                             fname_plot))
+      
+      if (is.null(modRows_iocc)) {
+        modRows_iocc <- modelPosition(iocc_last$iocc$model)$row
+      }
+      
+      for (modRow_iocc in modRows_iocc) {
+        cat("\nUpdating iocc. Model row: ", modRow_iocc)
+        iocc_last$iocc$model <- update(iocc_last$iocc$model, modRow=modRow_iocc)
+        ### Hist plot and ev of iocc
+        pdf(file=gsub("WHAT", paste0("histUev_iocc-", modRows_iocc), fname_plot))
+        yLimits = histUev(iocc.i$model, iocc.i$ev, pred=iocc.i$pred)
+        abline(h=max(yLimits)*max(ev@kappa), lwd=2)
+        dev.off()
+        
+        ### Comparing predictions
+        pred_iocc_all <- get_full_pred_vector(iocc.i)
+        hist2d(pred, pred_iocc_all, fname=gsub("WHAT", paste0("hist2d-", modRows_iocc), 
+                                               fname_plot))
+      }
     })
   }
   
