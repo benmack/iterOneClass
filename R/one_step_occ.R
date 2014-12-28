@@ -5,17 +5,14 @@ one_step_occ <- function(sttngs, iter, filename_U, test_set,
   
   time_stopper_model <- time_stopper_predict <- c()
   
-  fname_model <- paste0(folder_out, "iter-", iter, "_model.RData")
+  fname_model <- paste0(folder_out, "/model.RData")
   dir.create(folder_out)
-  fname_plot = paste0(folder_out, "iter-", iter, "_WHAT.pdf")
+  fname_plot = paste0(folder_out, "/WHAT.pdf")
   
   iocc.i <- iocc_load(sttngs$baseDir, iter, U_as_df=FALSE, filename_U=filename_U)
   un <- rasterTiled(brick(iocc.i$filename_U), mask=iocc.i$validCells)
   idx.feats <- colnames(iocc.i$model$trainingData)!=".outcome"
   names(un$raster) <- colnames(iocc.i$model$trainingData)[idx.feats]
-  
-
-  
   
   if (!file.exists(fname_model)) {
     
@@ -120,12 +117,12 @@ one_step_occ <- function(sttngs, iter, filename_U, test_set,
       
       
       if (is.null(modRows_iocc)) {
-        modRows_iocc <- modelPosition(iocc_last$iocc$model)$row
+        modRows_iocc <- modelPosition(iocc.i$model)$row
       }
       
       for (modRow_iocc in modRows_iocc) {
-        cat("\nUpdating iocc. Model row: ", modRow_iocc)
-        iocc_last$iocc$model <- update(iocc_last$iocc$model, modRow=modRow_iocc)
+        cat("Updating iocc. Model row: ", modRow_iocc, "\n")
+        iocc.i$model <- update(iocc.i$model, modRow=modRow_iocc)
         ### Hist plot and ev of iocc
         pdf(file=gsub("WHAT", paste0("histUev_iocc-", modRows_iocc), fname_plot))
         yLimits = histUev(iocc.i$model, iocc.i$ev, pred=iocc.i$pred)
