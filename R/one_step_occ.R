@@ -51,6 +51,7 @@ one_step_occ <- function(sttngs, iter, filename_U, test_set,
     dev.off()
     
   } else {
+    cat(paste("o_s_occ: Loading:", fname_model, "\n"))
     load(fname_model)
   }
   
@@ -58,7 +59,8 @@ one_step_occ <- function(sttngs, iter, filename_U, test_set,
     modRow_maxPuAuc <- modelPosition(model, modRank=1, by="puAuc")$row
     modRow_maxPuF <- modelPosition(model, modRank=1, by="puF")$row
     modRows <- unique(c(modRow_maxPuAuc, modRow_maxPuF))
-    cat(paste("Running models:", paste(modRows, collapse=", "), "\n"))
+    cat(paste("o_s_occ: Running models (puAuc/puF):", 
+              paste(modRows, collapse=", "), "\n"))
   }
   
   for (modRow in modRows) {
@@ -89,6 +91,7 @@ one_step_occ <- function(sttngs, iter, filename_U, test_set,
                        a = pred_test[test_set$y==-1])
         save(pred_test, ev, file=fname_eval)
       } else {
+        cat(paste("o_s_occ: Loading:", fname_eval, "\n"))
         load(fname_eval)
       }
     }
@@ -101,7 +104,8 @@ one_step_occ <- function(sttngs, iter, filename_U, test_set,
       
       ###
       if (ncol(train_pu_x)==2){
-        pdf(file=gsub("WHAT", "featurespace_iocc", fname_plot))
+        pdf(file=gsub("WHAT", paste0("featurespace_iocc-", 
+                                     modRows_iocc), fname_plot))
         featurespace(iocc.i$model)
         dev.off()
         pdf(file=gsub("WHAT", "featurespace_bench", fname_plot))
@@ -122,18 +126,29 @@ one_step_occ <- function(sttngs, iter, filename_U, test_set,
       
       for (modRow_iocc in modRows_iocc) {
         cat("Updating iocc. Model row: ", modRow_iocc, "\n")
-        iocc.i$model <- update(iocc.i$model, modRow=modRow_iocc)
+        gc()
+        iocc.i <- iocc_load(sttngs$baseDir, iter, U_as_df=FALSE, 
+                            filename_U=filename_U, modRow=modRow_iocc, 
+                            test_set=test_set)
+        # iocc.i$model <- update(iocc.i$model, modRow=modRow_iocc)
+        gc()
         ### Hist plot and ev of iocc
-        pdf(file=gsub("WHAT", paste0("histUev_iocc-", modRows_iocc), fname_plot))
+        pdf(file=gsub("WHAT", paste0("histUev_iocc-", 
+                                     modRows_iocc), fname_plot))
         yLimits = histUev(iocc.i$model, iocc.i$ev, pred=iocc.i$pred)
         abline(h=max(yLimits)*max(ev@kappa), lwd=2)
         dev.off()
+        gc()
         
         ### Comparing predictions
         pred_iocc_all <- get_full_pred_vector(iocc.i)
-        hist2d(pred, pred_iocc_all, fname=gsub("WHAT", paste0("hist2d-", modRows_iocc), 
-                                               fname_plot))
+        gc()
+        hist2d(pred, pred_iocc_all, 
+               fname=gsub("WHAT", paste0("hist2d_iocc-", modRows_iocc),
+                          fname_plot))
+        gc()
       }
+      rm(pred_iocc_all)
     })
   }
   

@@ -2,13 +2,14 @@
 ### PACKAGES AND FUNCTIONS
 require(iterOneClass)
 require(rasterTiled)
+require(miscRfunctions)
 
 require(doParallel)
 require(kernlab)
 require(pROC)
 
 ### --------------------------------------------------------
-### SETTINGS controling the workflow here...
+### SETTINGS controlling the workflow here...
 
 ### iterative occ
 kFolds = 10
@@ -23,18 +24,6 @@ baseDir = "demo/results_minPppAtLw"
 nPixelsPerTile = 10000
 expand = 3
 minPppAtLw=TRUE
-
-### benchmark, one-step biased svm ???
-
-# sttngs.bsvm <- list(nTrainPos = 20,
-#                     nTrainUn = 100,
-#                    indepUn = .5,
-#                    kFolds = kFolds,
-#                    nTest = 10000,
-#                    seed = 123,
-#                    baseDir = "ignore",
-#                    nPixelsPerTile = 10000,
-#                    expand = 4)
 
 ### --------------------------------------------------------
 ### 
@@ -78,13 +67,13 @@ writeRaster(banana$x, filename_U, overwrite=TRUE)
 
 
 ### --------------------------------------------------------
-### register a parallel backand
+### register a parallel backend
 cl <- makeCluster(detectCores())
 registerDoParallel(cl)
 
 ### --------------------------------------------------------
 ### Run iocc
-if (FALSE)
+if (TRUE)
   iocc <- iterativeOcc(P, U, 
                        iter_max = sttngs$iterMax,
                        n_train_un = sttngs$nTrainUn, 
@@ -116,7 +105,7 @@ mp.puAuc <- modelPosition(iocc$model, modRank=1, by='puAuc')
 ### several candidate models, e.g. the
 candidateModels.iocc <- c(mp.puF$row, mp.puAuc$row)
 for (modRow in candidateModels.iocc)
-  res_pred_img <- predict.iOcc(sttngs, iter, modRow,
+  res_pred_img <- predict_iOcc(sttngs, iter, modRow,
                                filename_U=filename_U)
 
 ### --------------------------------------------------------
@@ -131,17 +120,16 @@ bench <- one_step_occ(sttngs, iter, filename_U, PN,
                       modRows_iocc=candidateModels.iocc) 
 
 
-
-
-load(paste0(folder_out, "/model-37_pred.RData"))
-pred_occ <- pred
-load(gsub("benchmark", "predU/model-092.RData", folder_out))
-
-iocc.i <- iocc_load(sttngs$baseDir, iter,
-                    filename_U=filename_U, U_as_df = FALSE,
-                    status="beforeNegClassification",
-                    modRow=92, test_set=PN, th=0)
-pred_iocc <- get_full_pred_vector(iocc.i)
-
-
+# 
+# load(paste0(folder_out, "/model-37_pred.RData"))
+# pred_occ <- pred
+# load(gsub("benchmark", "predU/model-092.RData", folder_out))
+# 
+# iocc.i <- iocc_load(sttngs$baseDir, iter,
+#                     filename_U=filename_U, U_as_df = FALSE,
+#                     status="beforeNegClassification",
+#                     modRow=92, test_set=PN, th=0)
+# pred_iocc <- get_full_pred_vector(iocc.i)
+# 
+# 
 

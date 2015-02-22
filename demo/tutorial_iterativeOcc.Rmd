@@ -1,0 +1,64 @@
+---
+title: "IterativeOcc"
+author: "Benjamin Mack"
+date: "Sunday, February 22, 2015"
+output:
+  html_document:
+    toc: yes
+---
+
+## Introduction
+
+## Required input
+
+The following packages are required:
+
+```{r, warning=FALSE, message=FALSE}
+require(doParallel)
+require(kernlab)
+require(pROC)
+
+require(iterOneClass)
+require(rasterTiled)
+```
+
+And the settings list:
+
+```{r}
+settings <- list(nTrainUn = 100,
+                 iterMax = "noChange+3",
+                 indepUn = 0.5,
+                 kFolds = 10,
+                 seed = 123,
+                baseDir = "demo/results",
+                nPixelsPerTile = 10000,
+                expand = 3, 
+                minPppAtLw=TRUE)
+
+seed <- 123
+
+```
+
+Some data:
+
+```{r}
+U <- rasterTiled(get_banana()$x, 
+                 nPixelsPerTile=settings$nPixelsPerTile)
+P <- banana_trn_pos(n_trn_pos=20, seed)
+PN <- banana_trn_pos(5000)
+```
+
+## Run the classification
+
+```{r}
+
+cl <- makeCluster(detectCores())
+registerDoParallel(cl)
+
+### --------------------------------------------------------
+### Run iocc
+iocc <- iterativeOcc(P, U, settings=settings)
+
+```
+
+
