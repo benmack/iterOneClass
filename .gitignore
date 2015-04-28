@@ -3,3 +3,5 @@
 .RData
 ignore
 demo/results_minPppAtLw
+demo/results_*
+inst/extdata/banana_x*

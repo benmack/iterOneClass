@@ -3,31 +3,21 @@
 \alias{iterativeOcc}
 \title{Train a iterative one-class classifier.}
 \usage{
-iterativeOcc(train_pos, un, iter_max = "noChange",
-  n_train_un = nrow(train_pos) * 2, k = 10, indep_un = 0.5, expand = 2,
-  base_dir = NULL, test_set = NULL, seed = NULL, scale = TRUE,
-  minPppAtLw = FALSE, ...)
+iterativeOcc(P, U, settings = NULL, PN = NULL, overwrite = FALSE,
+  verbosity = 3, smallIniGrid = TRUE, tuneGrid = expand.grid(sigma = 1,
+  cNeg = 2^seq(-10, 15, 3), cMultiplier = 2^seq(2, 11, 2)), useSigest = TRUE,
+  ...)
 }
 \arguments{
-\item{train_pos}{a data frame with the positive training samples.}
+\item{P}{a data frame with the positive training samples.}
 
-\item{un}{an object of class \code{\link{rasterTiled}} image data to be classified.}
+\item{U}{an object of class \code{\link{rasterTiled}} image data to be classified.}
 
-\item{iter_max}{maximum number of iterations.}
+\item{settings}{the settings list}
 
-\item{n_train_un}{the number of unlabeled samples to be used for training and validation.}
+\item{PN}{a data frame used as independent test set. the first column must be the response variable with 1 being the positive and -1 the negative samples.}
 
-\item{k}{the number of folds used for resampling.}
-
-\item{indep_un}{the fraction of unlabeled samples used for validation.}
-
-\item{expand}{...}
-
-\item{base_dir}{a folder where the results are written to.}
-
-\item{test_set}{a data frame used as independent test set. the first column must be the response variable with 1 being the positive and -1 the negative samples.}
-
-\item{seed}{a seed point to be set for sampling the unlabeled data and the}
+\item{overwrite}{should already computed elements be recalculated}
 
 \item{...}{other arguments that can be passed to \code{\link{trainOcc}}}
 }

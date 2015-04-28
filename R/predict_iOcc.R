@@ -2,7 +2,7 @@
 predict_iOcc <- function(sttngs, iter, modRow, 
                              filename_U=filename_U) {
   # get the data
-  iocc.i <- iocc_load(sttngs$baseDir, iter, 
+  iocc.i <- get_ioccObj(sttngs$baseDir, iter, 
                       filename_U=filename_U, U_as_df=FALSE)
   model <- update(iocc.i$model, modRow=modRow)
   fname_img <- prediction_image_filename(sttngs$baseDir, iter, modRow)

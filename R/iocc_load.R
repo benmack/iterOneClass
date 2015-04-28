@@ -3,7 +3,7 @@ iocc_load <- function(base_dir, iter,
                       filename_U=NULL, U_as_df = FALSE,
                       status="beforeNegClassification", 
                       modRow=NULL, test_set=NULL, th=NULL) { 
-  
+  warning("DEPRECTION WARNING. BETTTER USE 'get_ioccObj'.")
   cat("LOADING: ", iocc_filename(base_dir, 0, 
                                    "_ini.RData"), "\n")
   load(iocc_filename(base_dir, 0, "_ini.RData"))
@@ -11,6 +11,9 @@ iocc_load <- function(base_dir, iter,
   cat("LOADING: ", iocc_filename(base_dir, iter, 
                                    "_results.RData"), "\n")
   load(iocc_filename(base_dir, iter, "_results.RData"))
+
+  dir.create(iocc_filename(base_dir, iter, "/predU"),
+             showWarnings=FALSE)
   
   if (status=="beforeNegClassification") {
     pred_neg[pred_neg==iter] <- 0

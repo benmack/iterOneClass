@@ -9,32 +9,39 @@
 #' @param ... other arguments that can be passed to \code{\link{trainOcc}}
 #' @export
 iterativeOcc <- function (P, U, settings=NULL, PN=NULL,
-                          overwrite=FALSE,
-#                           iterMax = 'noChange',
-#                           nTrainUn = nrow(P)*2, 
-#                           kFolds = 10, 
-#                           indepUn = 0.5, 
-#                           expand=2, 
-#                           baseDir=NULL,
-#                           PN=NULL, 
-#                           seed=NULL,
-#                           scale=TRUE, 
-#                           minPppAtLw=FALSE,
+                          overwrite=FALSE, verbosity=3,
+                          smallIniGrid=TRUE,
+                          tuneGrid=expand.grid(sigma=1, 
+                                               cNeg=2^seq(-10, 15, 3),
+                                               cMultiplier=2^seq(2, 11, 2)),
+                          useSigest=TRUE,
+                          #                           iterMax = 'noChange',
+                          #                           nTrainUn = nrow(P)*2, 
+                          #                           kFolds = 10, 
+                          #                           indepUn = 0.5, 
+                          #                           expand=2, 
+                          #                           baseDir=NULL,
+                          #                           PN=NULL, 
+                          #                           seed=NULL,
+                          #                           scale=TRUE, 
+                          #                           minPppAtLw=FALSE,
                           ...
 ) {
   
-
   if (is.null(settings$baseDir)) {
     settings$baseDir <- paste(tempdir(), "\\iterOneClass", sep="")
     cat("\nSave results in ", settings$baseDir, "\n\n")
   }
-
-  attach(settings)
-
-  if (exists_fname("ini", baseDir) & !overwrite)
   
-  settings$colors_pu<- list(pos='#2166ac', un='#e0e0e0') 
-  settings$colors_pn <- list(pos='#2166ac', neg='#f4a582')
+  if (exists_fname("ini", settings$baseDir) & !overwrite) {  
+    # LOAD ini, but not the baseDir
+    basedir_bak <- settings$baseDir
+    load(get_fname("ini", settings$baseDir))
+    settings$baseDir <- basedir_bak
+  }
+  
+  settings$colors_pu<- .get_colors("PU")
+  settings$colors_pn <- .get_colors("PN")
   
   if (!is.null(PN)) {
     #   index_test <- match(as.numeric(rownames(PN)), 
@@ -48,217 +55,275 @@ iterativeOcc <- function (P, U, settings=NULL, PN=NULL,
   n_un <- length(U$validCells)
   n_un_all_iters <- n_un
   nPixelsPerTile <- U$tiles[2,1]
+  pred_rm_sum <- list()
   
-  if (!is.null(seed))
-    seed_global <- settings$seed
+  if (!is.null(settings$seed)) {
+    seed <- settings$seed
+  } else {
+    seed <- round(runif(1, 1, 1000000), 0)
+  }
   
-  dir.create(baseDir, showWarnings=FALSE)
+  dir.create(settings$baseDir, showWarnings=FALSE)
   
   pred_neg <- vector(mode="integer", length=n_un)
   
   validCells <- U$validCells
+  fname_U <- U$raster@file@name
   
-  save(n_un, nPixelsPerTile, validCells, seed_global, 
-       settings, PN, file=get_filename("ini", baseDir))
+  tuneGrid.bak <- tuneGrid
+  
+  save(fname_U, n_un, nPixelsPerTile, validCells, seed, 
+       settings, PN, tuneGrid, smallIniGrid, useSigest,
+       file=get_fname("ini", settings$baseDir))  # SAVE ini
   
   attach(settings)
-
+  
   ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
   ### iterate 
   iter = 0
   STOP = FALSE
   
-  time_stopper <- proc.time()
-  time_stopper_model <- time_stopper_predict <- c()
-  
-  
-  while(!STOP) {
-    
+  time_stopper <- c()
+  time_stopper_model <- time_stopper_predict <- 
+    time_stopper_sieve <- time_stopper_writeTiles <- c()
+  th_all <- c()
+  while(!STOP) {  # start the iterations
     iter <- iter + 1
-    n_un_iter <- length( U$validCells )
-    
-    
-    if (!is.null(seed)) {
-      set.seed(seed_global*iter)
-      seed <- round(runif(1, 1, 1000000), 0)
-    }
-    
-    cat(sprintf("Iteration: %d \n\tPercent unlabeled: %2.2f", iter, (n_un_iter/n_un)*100 ), "\n")
-    
-    ### classification
-    cat("\tTraining ... ")
-    ans <- proc.time()
-    train_un <- sample_rasterTiled(U, size=nTrainUn, seed=seed)
-    train_pu_x <- rbind(P, train_un)
-    train_pu_y <- puFactor(rep(c(1, 0), 
-                               c(nrow(P), nrow(train_un))))
-    
-    index <- createFoldsPu( train_pu_y, kFolds=kFolds, 
-                            indepUn=indepUn, seed=seed )
-    model <- trainOcc(x=train_pu_x, y=train_pu_y, index=index, ...)
-
-    if (minPppAtLw) {
-      cat("threshold at lower-whisker ... ")
-      # if (oneClass:::.foreach.exists()) { # ASSUMED
+    seed_iter <- seed*iter
+    if (!file.exists(iocc_filename(baseDir, iter, "_results.RData"))) {
+      
+      time_stopper <- rbind(time_stopper, proc.time())
+      
+      n_un_iter <- length( U$validCells )
+      
+      cat(sprintf("Iteration: %d \n\tPercent unlabeled: %2.2f", iter, (n_un_iter/n_un)*100 ), "\n")
+      
+      if (!file.exists(get_fname("model", baseDir, iter=iter))) {
+        ### classification
+        cat("\tTraining ... ")
+        ans <- proc.time()
+        train_un <- sample_rasterTiled(U, size=nTrainUn, seed=seed_iter)
+        train_pu_x <- rbind(P, train_un)
+        train_pu_y <- puFactor(rep(c(1, 0), 
+                                   c(nrow(P), nrow(train_un))))
+        
+        # tuneGrid
+        if (useSigest) {
+          set.seed(seed_iter)
+          sigma <- sigest(train_pu_x)
+        } else {
+          sigma <- unique(tuneGrid[, "sigma"])
+        }
+        cNeg <- unique(tuneGrid[, "cNeg"]) # 2^seq(-10, 15, 3)
+        cMultiplier <- unique(tuneGrid[, "cMultiplier"]) # 
+        if (iter==1) {
+          if (smallIniGrid) {
+            set.seed(seed_iter)
+            sigma <- max(sigest(train_pu_x))
+            cMultiplier=1
+          }
+        }
+        tuneGrid = expand.grid(sigma=sigma, 
+                               cNeg=cNeg,
+                               cMultiplier=cMultiplier)
+      
+      index <- createFoldsPu( train_pu_y, k=kFolds, 
+                              indepUn=indepUn, seed=seed_iter)
+      model <- trainOcc(x=train_pu_x, y=train_pu_y, index=index, 
+                        tuneGrid=tuneGrid, ...)
+      tuneGrid <- tuneGrid.bak
+      
+      if (minPppAtLw) {
+        cat("threshold at lower-whisker ... ")
+        # if (oneClass:::.foreach.exists()) { # ASSUMED
         newMetrics <- foreach(mm=1:nrow(model$results),
                               .combine=rbind,
                               .packages="oneClass") %dopar%
           pppAtLowerWhisker(model, modRow=mm)
+        
+        newMetrics <- data.frame(newMetrics, 1-newMetrics[, 2])
+        colnames(newMetrics) <- c('thAtLw', 'pppAtLw', 'sDff', 'pnpAtLw')
+        
+        model$results <- cbind(model$results, newMetrics)
+        
+      if (all(model$results[, "pnpAtLw"]==1)) {
+          model <- update(model, modRank=1, metric="sDff")
+      } else {
+          model <- update(model, modRank=1, metric="pnpAtLw")
+      }
+        #hist(model)
+        #featurespace(model, thresholds=newMetrics[idx, 1])
+      }
       
-      
-      newMetrics <- data.frame(newMetrics, 1-newMetrics[, 2])
-      colnames(newMetrics) <- c('thAtLw', 'pppAtLw', 'pnpAtLw')
-      
-      model$results <- cbind(model$results, newMetrics)
-      
-      model <- update(model, modRank=1, metric="pnpAtLw")
-      
-      #hist(model)
-      #featurespace(model, thresholds=newMetrics[idx, 1])
-   }
-    
-    time_stopper_model <- rbind(time_stopper_model, (proc.time()-ans)[1:3])
+      time_stopper_model <- rbind(time_stopper_model, (proc.time()-ans)[1:3])
+      save(model, time_stopper_model, file=get_fname("model", baseDir, iter=iter))
+    } else {
+      load(get_fname("model", baseDir, iter=iter))
+    }
     cat("Completed in", time_stopper_model[iter, 3], "sec.\n")
     
-    
     cat("\tPrediction ... ")
-    ans <- proc.time()
-    pred <- predict(U, model, returnRaster = FALSE, 
-                    fnameLog = iocc_filename(baseDir, iter, 
-                                             "_log_prediction.txt"))
     
-    time_stopper_predict <- rbind(time_stopper_predict, (proc.time()-ans)[1:3])
+    fname_pred <- get_fname("predictions", baseDir, iter=iter)
+    if (!file.exists(fname_pred)) {
+      
+      ans <- proc.time()
+      pred <- predict(U, model, returnRaster = FALSE, 
+                      fnameLog = iocc_filename(baseDir, iter, 
+                                               "_log_prediction.txt"))
+      time_stopper_predict <- rbind(time_stopper_predict, (proc.time()-ans)[1:3])
+      save(pred, time_stopper_predict, file=get_fname("predictions", baseDir, iter=iter))
+    } else {
+      load(file=fname_pred)
+    }
     cat("Completed in", time_stopper_predict[iter, 3], "sec.\n")
     
     th <- thresholdNu(model, pred, expand=expand)
-  
+    th_all <- c(th_all, th)
+    
+    pred_rm <- pred<th
+    pred_rm_bak <- pred_rm
+    pred_rm_sum[[iter]] <- c(th=sum(pred_rm), sieve=0)
+    
+    if (!is.null(sieve)){
+      ans <- proc.time()
+      fname_pred_r <- gsub(".RData", ".tif", fname_pred)
+      fname_pred_rs <- gsub(".RData", "_sieved.tif", fname_pred)
+      
+      write_rasterTiled(U, pred_rm, # attr(th, "th_non_expanded"), 
+                        fname_pred_r, nodata=TRUE, 
+                        datatype="INT1U", overwrite=TRUE)
+      r_sieved <- gdal_sieve(srcfile = fname_pred_r,
+                             dstfile = fname_pred_rs, 
+                             st = sieve, returnRaster=TRUE)
+      pred_rm <- r_sieved[][U$validCells]==1
+      pred_rm_sum[[iter]]["sieve"] <- sum(pred_rm)
+      time_stopper_sieve <- rbind(time_stopper_sieve, (proc.time()-ans)[1:3])
+      cat("Completed in", time_stopper_sieve[iter, 3], "sec.\n")
+    }
+    
     pred_in_pred_neg <- which(pred_neg==0)
-    new_neg_in_pred_neg <- pred_in_pred_neg[pred<th]
+    new_neg_in_pred_neg <- pred_in_pred_neg[pred_rm]
     pred_neg[ new_neg_in_pred_neg ] <- iter
     
     n_un_all_iters[iter+1] <- n_un_all_iters[iter]-length(new_neg_in_pred_neg)
     
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    # update U
+    ans <- proc.time()
+    U <- rasterTiled(U$raster, 
+                     mask=U$validCells[!pred_rm], 
+                     nPixelsPerTile=nPixelsPerTile,
+                     asRData=TRUE)
+    time_stopper_writeTiles <- rbind(time_stopper_writeTiles, (proc.time()-ans)[1:3])
+      
     ### time
-    time_stopper <- rbind(time_stopper, proc.time())
-    
-    
+    # time_stopper <- rbind(time_stopper, proc.time())
+    time_stopper[iter, ] <- (proc.time()-time_stopper[iter, ])
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    # Test
     if (!is.null(PN)) {
       cat("\tEvaluation ... ")
       dummy <- .evaluate_iocc(model, PN, pred_neg_test, th, iter)
       pred_test <- dummy$pred_test
       pred_neg_test <- dummy$pred_neg_test
       ev <- dummy$ev
+    } else {
+      pred_test <- pred_neg_test <- ev <- NULL
     }
+    
+    ### save results of this iteration
+    save(iter, th, th_all, pred_neg, # model, pred
+         pred_rm_sum,
+         pred_test, pred_neg_test, ev, 
+         n_un_all_iters, seed, seed_iter,
+         time_stopper, time_stopper_model, time_stopper_predict,
+         file=iocc_filename(baseDir, iter, "_results.RData"))
+    
     
     ### plot diagnostics
     cat("\n\tWriting results in folder ", baseDir)
-      
-    param_as_str <- paste(colnames(signif(model$bestTune)), 
-                          model$bestTune, sep=": ", 
-                          collapse=" | ")
     
-    ### grid
-    ans <- plot(model, plotType="level")
-    pdf(iocc_filename(baseDir, iter, "_grid.pdf"))
-    trellis.par.set(caretTheme())
-    print(ans)
-    dev.off()
+    param_as_str <- .get_param_as_str(model)
     
-    ### histogram
-    pdf(iocc_filename(baseDir, iter, "_histogram.pdf"))
-    hist(model, pred, main=param_as_str)
-    abline(v=c(th, attr(th, "th_non_expanded")))
-    if (!is.null(PN)) {
-      rug(pred_test[PN$y==1], ticksize = 0.03, col=colors_pn$p)
-      rug(pred_test[PN$y==-1], ticksize = -0.03, col=colors_pn$n)
-    }
-    dev.off()
-    ### featurespace
-    if (ncol(train_pu_x)==2) {
-      pdf(iocc_filename(baseDir, iter, "_featurespace.pdf"))
-      featurespace(model, 
-                   thresholds=c(th, attr(th, "th_non_expanded")), 
-                   main=param_as_str)
-      dev.off()
-    }
+    ioccObj <- .c_ioccObj(environment())
     
-    ### test
-    if (!is.null(PN)) {
-      pdf(iocc_filename(baseDir, iter, "_eval_pn.pdf"))
-      plot(ev, main=paste("max. Kappa:", round(max(ev@kappa), 2)))
-      dev.off()
-    }
+    plot_iocc(ioccObj, what="grid", 
+              outfile=iocc_filename(baseDir, iter, "_grid.pdf"))
+    plot_iocc(ioccObj, what="hist", 
+              outfile=iocc_filename(baseDir, iter, "_histogram.pdf"))
+    plot_iocc(ioccObj, what="featurespace", 
+              outfile=iocc_filename(baseDir, iter, "_featurespace.pdf"))
+    plot_iocc(ioccObj, what="eval", 
+              outfile=iocc_filename(baseDir, iter, "_eval_pn.pdf"))
+    plot_iocc(ioccObj, what="n_unlabeled", 
+              outfile=iocc_filename(baseDir, 0, "_n_unlabeled.pdf"))
+    plot_iocc(ioccObj, what="time", 
+              outfile=iocc_filename(baseDir, 0, "_time.pdf"))
     
-    ### change plots
+    loaded = FALSE
+  } else {
+    load(iocc_filename(baseDir, iter, "_results.RData"))
+    loaded = TRUE
+  }
+  if (is.character(iterMax)) {
+    # iter of no change
     dff <- abs(diff(n_un_all_iters))
-    
-    pdf(iocc_filename(baseDir, 0, "_n_unlabeled.pdf"))
-      plot(1:(iter+1), n_un_all_iters, type="b", 
-           xlab="iteration", ylab="# unlabeled", log="y")
-      text(2:(iter+1), n_un_all_iters[2:(iter+1)], 
-           label = paste("d:", dff), pos=c(3))    
-    dev.off()
-    pdf(iocc_filename(baseDir, 0, "_time.pdf"))
-      plot(1:(iter), diff(time_stopper[, "elapsed"]), 
-           type="b", xlab="iteration", 
-           ylab="time [s]")
-    dev.off()
-    
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    # update U
-    U <- rasterTiled(U$raster, 
-                      mask=U$validCells[pred>=th], 
-                      nPixelsPerTile = nPixelsPerTile)
-    
-    ### save results of this iteration
-    save(iter, model, pred, th, pred_neg, pred_neg_test, ev, 
-         n_un_all_iters, seed_global, seed, 
-         time_stopper, time_stopper_model, time_stopper_predict,
-         file=iocc_filename(baseDir, iter, "_results.RData") )
-    
-    if (is.character(iterMax)) {
-      # iter of no change
-      if (grep("+", iterMax)==1) {
-        nSeqNoChangeCrit <- as.numeric(strsplit(iterMax, "[+]")[[1]][2])
-        nSeqNoChange <- sum(dff[ max(1, iter-nSeqNoChangeCrit+1) : iter ] == 0)
-        if (nSeqNoChange >= nSeqNoChangeCrit)
-          STOP=TRUE
-      }
-      if ( iterMax=="noChange" & 
-             dff[iter]==0 )
+    if (length(grep("[+]", iterMax))==1) {
+      nSeqNoChangeCrit <- as.numeric(strsplit(iterMax, "[+]")[[1]][2])
+      nSeqNoChange <- sum(dff[ max(1, iter-nSeqNoChangeCrit+1) : iter ] == 0)
+      if (nSeqNoChange >= nSeqNoChangeCrit)
         STOP=TRUE
-    } else if (is.numeric(iter)) {
-      if (iter==iterMax)
-        STOP = TRUE  
-    } else {
-      rm(model, pred, th, ev, seed, n_un_iter, train_un,
-       train_pu_x, train_pu_y)
     }
-    
-    
-    cat(sprintf("\t%2.2f real and %2.2f CPU time required.", 
-                (time_stopper[iter+1, , drop=FALSE]-
-                   time_stopper[iter, , drop=FALSE])[,"elapsed"], 
-                (time_stopper[iter+1, , drop=FALSE]-
-                   time_stopper[iter, , drop=FALSE])[,"sys.self"]
+    if ( iterMax=="noChange" & 
+           dff[iter]==0 )
+      STOP=TRUE
+  } else if (is.numeric(iter)) {
+    if (iter==iterMax)
+      STOP = TRUE  
+  } else {
+    rm(model, pred, th, ev, seed, seed_iter, 
+       n_un_iter, train_un,
+       train_pu_x, train_pu_y)
+  }
+  if (loaded) {
+    cat(sprintf("\t%2.2f real and %2.2f CPU time required (results and time loaded saved results).",
+                time_stopper[iter, , drop=FALSE][,"elapsed"],
+                time_stopper[iter, , drop=FALSE][,"sys.self"]
+    ), "\n")
+    if (STOP) {
+      load(get_fname("model", baseDir, iter=iter))
+      load(get_fname("predictions", baseDir, iter=iter))
+    }
+    } else {
+    cat(sprintf("\t%2.2f real and %2.2f CPU time required.",
+                time_stopper[iter, , drop=FALSE][,"elapsed"],
+                time_stopper[iter, , drop=FALSE][,"sys.self"]
     ), "\n")
   }
-  
-  return( 
-    list(U = U,
-         iter=iter, 
-         model=model, 
-         pred=pred, 
-         th=th, 
-         pred_neg=pred_neg, 
-         pred_neg_test=pred_neg_test, 
-         ev=ev, 
-         seed_global=seed_global, 
-         seed=seed, 
-         time_stopper=time_stopper, 
-         time_stopper_model=time_stopper_model, 
-         time_stopper_predict=time_stopper_predict,
-         file=iocc_filename(baseDir, iter, "_results.RData")
-    )
-  )
+}
+gc()
+return(
+  structure(list(U = U,
+                 iter=iter, 
+                 model=model, 
+                 pred=pred, 
+                 th=th, 
+                 th_all=th_all,
+                 pred_neg=pred_neg, 
+                 pred_rm_sum=pred_rm_sum, 
+                 n_un_all_iters=n_un_all_iters,
+                 pred_neg_test=pred_neg_test, 
+                 ev=ev, 
+                 seed=seed, 
+                 seed_iter=seed_iter,
+                 time_stopper=time_stopper, 
+                 time_stopper_model=time_stopper_model, 
+                 time_stopper_predict=time_stopper_predict,
+                 time_stopper_writeTiles=time_stopper_writeTiles,
+                 time_stopper_sieve=time_stopper_sieve,
+                 baseDir=baseDir,
+                 file=iocc_filename(baseDir, iter, "_results.RData")
+  ), class = "iocc")
+)
 }

@@ -9,19 +9,20 @@ one_step_occ <- function(sttngs, iter, filename_U, test_set,
   dir.create(folder_out)
   fname_plot = paste0(folder_out, "/WHAT.pdf")
   
-  iocc.i <- iocc_load(sttngs$baseDir, iter, U_as_df=FALSE, filename_U=filename_U)
-  un <- rasterTiled(brick(iocc.i$filename_U), mask=iocc.i$validCells)
-  idx.feats <- colnames(iocc.i$model$trainingData)!=".outcome"
-  names(un$raster) <- colnames(iocc.i$model$trainingData)[idx.feats]
+  iocc.1 <- get_ioccObj(sttngs$baseDir, 1, U_as_df=FALSE, fname_U=filename_U)
+  iocc.i <- get_ioccObj(sttngs$baseDir, iter, U_as_df=FALSE, fname_U=filename_U)
+  un <- iocc.1$U
+  idx.feats <- colnames(iocc.1$model$trainingData)!=".outcome"
+  names(un$raster) <- colnames(iocc.1$model$trainingData)[idx.feats]
   
   if (!file.exists(fname_model)) {
     
-    idx.obs <- iocc.i$model$trainingData$.outcome=="pos"
-    train_pos <- iocc.i$model$trainingData[idx.obs, idx.feats]
+    idx.obs <- iocc.1$model$trainingData$.outcome=="pos"
+    train_pos <- iocc.1$model$trainingData[idx.obs, idx.feats]
     
-    n_un_bsvm <- as.integer(corresponding_samplesize_in_U(iocc.i$n_un,
-                                                          iocc.i$n_un_iter,
-                                                          sttngs$nTrainPos))
+    n_un_bsvm <- as.integer(corresponding_samplesize_in_U(iocc.i$n_un[1],
+                                                          iocc.i$n_un[iter],
+                                                          sttngs$nTrainUn))
     train_un <- sample_rasterTiled(un, n_un_bsvm, seed=sttngs$seed)
     train_pu_x <- rbind(train_pos, train_un)
     train_pu_y <- puFactor(rep(c(1, 0), c(nrow(train_pos),
@@ -32,8 +33,9 @@ one_step_occ <- function(sttngs, iter, filename_U, test_set,
     cat("\tTraining ... ")
     ans <- proc.time()
     ### due to memory issues:
+    cl <- makeCluster(detectCores())
     model <- trainOcc(x=train_pu_x, y=train_pu_y, index=index,
-                      tuneGrid=sttngs$tuneGrid, allowParallel = allowParallel)
+                      tuneGrid=sttngs$tuneGrid, allowParallel=allowParallel)
     time_stopper_model <- rbind(time_stopper_model, (proc.time()-ans)[1:3])
     save(train_pu_x, train_pu_y, n_un_bsvm, index, model, 
          time_stopper_model, file=fname_model)
@@ -127,7 +129,7 @@ one_step_occ <- function(sttngs, iter, filename_U, test_set,
       for (modRow_iocc in modRows_iocc) {
         cat("Updating iocc. Model row: ", modRow_iocc, "\n")
         gc()
-        iocc.i <- iocc_load(sttngs$baseDir, iter, U_as_df=FALSE, 
+        iocc.i <- get_ioccObj(sttngs$baseDir, iter, U_as_df=FALSE, 
                             filename_U=filename_U, modRow=modRow_iocc, 
                             test_set=test_set)
         # iocc.i$model <- update(iocc.i$model, modRow=modRow_iocc)

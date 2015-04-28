@@ -1,4 +1,5 @@
 #' @importFrom dismo evaluate
+#' @export
 .evaluate_iocc <- function (model, test_set, pred_neg_test, th, iter) {
   n_un_test_iter <- sum(pred_neg_test==0)
   cat(sprintf("\tPercent unlabeled (test): %2.2f", 
@@ -18,5 +19,6 @@
                  a = pred_test[test_set$y==-1])
   
   return(list(pred_test=pred_test, 
-              pred_neg_test=pred_neg_test, ev=ev))
+              pred_neg_test=pred_neg_test, 
+              ev=ev))
 }

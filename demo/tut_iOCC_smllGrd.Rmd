@@ -31,6 +31,20 @@ require(gdalUtils)
 
 require(iterOneClass)
 require(rasterTiled)
+
+register_backend <- 
+  function(cl=NULL, nCores=NULL) {
+    require(foreach)
+    require(doParallel)
+    
+    if (is.null(nCores))
+      nCores <- detectCores()
+      try(stopCluster(cl))
+      cl <- makeCluster(nCores)
+      registerDoParallel(cl)
+      return(cl)
+  }
+
 ```
 
 And a list of settings:
@@ -44,24 +58,32 @@ sttngs <- list(nTrainUn = 100,
                baseDir = paste0("D:/github/iterOneClass/demo/results_s", 222),
                nPixelsPerTile = 10000,
                expand = 3, 
-               minPppAtLw=TRUE)
+               minPppAtLw=TRUE, 
+               sieve=25)
+nCores <- 3
 ```
 
 Finally, some data:
 
 ```{r, loadData}
-U <- rasterTiled(get_banana()$x, 
-                 nPixelsPerTile=sttngs$nPixelsPerTile)
-P <- banana_trn_pos(n_trn_pos=20, sttngs$seed)
-PN <- banana_tst_set(n=5000, seed=sttngs$seed)
+dat <- list(
+  U=rasterTiled(get_banana()$x, 
+                 nPixelsPerTile=sttngs$nPixelsPerTile),
+  P=banana_trn_pos(n_trn_pos=20, sttngs$seed),
+  PN=banana_tst_set(n=5000, seed=sttngs$seed))
 ```
 
 ```{r}
-Utr <- sample_rasterTiled(U, size=sttngs$nTrainUn, 
-                          seed=sttngs$seed)
-plot(rbind(P, Utr), pch=c(1, 4)[rep(c(1, 2), c(nrow(P), nrow(Utr)))])
+sigest(dat$P, frac=1)
+sigest(as.matrix(dat$PN[, -1]), frac=1)
 ```
 
+
+```{r}
+dat$Utr <- sample_rasterTiled(dat$U, size=sttngs$nTrainUn, 
+                          seed=sttngs$seed)
+plot(rbind(dat$P, dat$Utr), pch=c(1, 4)[rep(c(1, 2), c(nrow(dat$P), nrow(dat$Utr)))])
+```
 
 # Processing and analysis
 
@@ -71,8 +93,28 @@ plot(rbind(P, Utr), pch=c(1, 4)[rep(c(1, 2), c(nrow(P), nrow(Utr)))])
 cl <- makeCluster(detectCores())
 registerDoParallel(cl)
 
-iocc <- iterativeOcc(P, U, PN=PN, settings=sttngs)
+iocc <- iterativeOcc(dat$P, dat$U, settings=sttngs, 
+                     useSigest=T, smallIniGrid=T)
 ```
+
+
+```{r}
+finalIter <- which(diff(iocc$n_un_all_iters)==0)[1]
+
+cl <- register_backend(cl, nCores)
+modRows_unique <- get_unique_model(sttngs$baseDir, 1:finalIter)
+sapply(modRows_unique, length)
+
+subfolder_PN <- "PN"
+cl <- register_backend(cl, 3)
+ev_all <- evaluate_iocc(baseDir=sttngs$baseDir, iters=1:finalIter, 
+                        refset=dat$PN, modRows=modRows_unique, 
+                        subfolder=subfolder_PN)
+sapply(ev_all, length)
+
+
+```
+
 
 ```{r}
 # cl <- makeCluster(detectCores())
