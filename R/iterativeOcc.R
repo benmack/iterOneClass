@@ -15,6 +15,7 @@ iterativeOcc <- function (P, U, settings=NULL, PN=NULL,
                                                cNeg=2^seq(-10, 15, 3),
                                                cMultiplier=2^seq(2, 11, 2)),
                           useSigest=TRUE,
+                          cvPu = TRUE,
                           #                           iterMax = 'noChange',
                           #                           nTrainUn = nrow(P)*2, 
                           #                           kFolds = 10, 
@@ -126,204 +127,222 @@ iterativeOcc <- function (P, U, settings=NULL, PN=NULL,
         tuneGrid = expand.grid(sigma=sigma, 
                                cNeg=cNeg,
                                cMultiplier=cMultiplier)
-      
-      index <- createFoldsPu( train_pu_y, k=kFolds, 
-                              indepUn=indepUn, seed=seed_iter)
-      model <- trainOcc(x=train_pu_x, y=train_pu_y, index=index, 
-                        tuneGrid=tuneGrid, ...)
-      tuneGrid <- tuneGrid.bak
-      
-      if (minPppAtLw) {
-        cat("threshold at lower-whisker ... ")
-        # if (oneClass:::.foreach.exists()) { # ASSUMED
-        newMetrics <- foreach(mm=1:nrow(model$results),
-                              .combine=rbind,
-                              .packages="oneClass") %dopar%
-          pppAtLowerWhisker(model, modRow=mm)
+        if (!is.na(indepUn)) {
+          index <- createFoldsPu( train_pu_y, k=kFolds,
+                                  indepUn=indepUn, seed=seed_iter)
+        } else {
+          set.seed(seed_iter)
+          index <- createFolds(train_pu_y, k=kFolds)
+        }
+        model <- trainOcc(x=train_pu_x, y=train_pu_y, index=index, 
+                          tuneGrid=tuneGrid, ...)
+        tuneGrid <- tuneGrid.bak
         
-        newMetrics <- data.frame(newMetrics, 1-newMetrics[, 2])
-        colnames(newMetrics) <- c('thAtLw', 'pppAtLw', 'sDff', 'pnpAtLw')
+        if (!is.null(use_pnpAt)) {
+          cat("Threshold at ", use_pnpAt, " ... ")
+          # if (oneClass:::.foreach.exists()) { # ASSUMED
+          newMetrics <- foreach(mm=1:nrow(model$results),
+                                .combine=rbind,
+                                .packages="oneClass") %dopar%
+            oneClass::pnpAt(model, modRow=mm)
+          
+          model$results <- cbind(model$results, newMetrics)
+          
+          if (all(model$results[, use_pnpAt]==1)) {
+            model <- update(model, modRank=1, metric="sDff")
+          } else {
+            model <- update(model, modRank=1, metric=use_pnpAt)
+          }
+          #hist(model)
+          #featurespace(model, thresholds=newMetrics[idx, 1])
+        }
         
-        model$results <- cbind(model$results, newMetrics)
+        fnameTab <- iocc_filename(baseDir, iter, "_modsel_table.txt")
+        capture.output(print(signif(model$results, 2),
+                             print.gap=3), file=fnameTab)
         
-      if (all(model$results[, "pnpAtLw"]==1)) {
-          model <- update(model, modRank=1, metric="sDff")
+        for (mr in 1:nrow(newMetrics)) {
+          dir.create(iocc_filename(baseDir, iter, "/modsel"), recursive=TRUE)
+          pdf(iocc_filename(baseDir, iter, "/modsel/", sprintf("%03d", mr), "_hist.pdf"))
+          hist(update(model, modRow=mr), th=newMetrics[mr, gsub("pnp", "th", use_pnpAt)])
+          dev.off()
+        }
+        dummy <- signif(newMetrics, 2)
+        dummy$sel = ""
+        dummy$sel[modelPosition(model)$row] = "*"
+        sink(iocc_filename(baseDir, iter, "/modsel/newMetrics.txt"))
+        print(dummy)
+        sink()
+        
+        time_stopper_model <- rbind(time_stopper_model, (proc.time()-ans)[1:3])
+        save(model, time_stopper_model, file=get_fname("model", baseDir, iter=iter))
       } else {
-          model <- update(model, modRank=1, metric="pnpAtLw")
+        load(get_fname("model", baseDir, iter=iter))
       }
-        #hist(model)
-        #featurespace(model, thresholds=newMetrics[idx, 1])
+      cat("Completed in", time_stopper_model[iter, 3], "sec.\n")
+      
+      cat("\tPrediction ... ")
+      
+      fname_pred <- get_fname("predictions", baseDir, iter=iter)
+      if (!file.exists(fname_pred)) {
+        
+        ans <- proc.time()
+        pred <- predict(U, model, returnRaster = FALSE, 
+                        fnameLog = iocc_filename(baseDir, iter, 
+                                                 "_log_prediction.txt"))
+        time_stopper_predict <- rbind(time_stopper_predict, (proc.time()-ans)[1:3])
+        save(pred, time_stopper_predict, file=get_fname("predictions", baseDir, iter=iter))
+      } else {
+        load(file=fname_pred)
+      }
+      cat("Completed in", time_stopper_predict[iter, 3], "sec.\n")
+      
+      th <- thresholdLikN(model, pred, thStart=thStartLikN, expand=expand)
+      th_all <- c(th_all, th)
+      
+      pred_rm <- pred<th
+      pred_rm_bak <- pred_rm
+      pred_rm_sum[[iter]] <- c(th=sum(pred_rm), sieve=0)
+      
+      if (!is.null(sieve)){
+        ans <- proc.time()
+        fname_pred_r <- gsub(".RData", ".tif", fname_pred)
+        fname_pred_rs <- gsub(".RData", "_sieved.tif", fname_pred)
+        
+        write_rasterTiled(U, pred_rm, # attr(th, "th_non_expanded"), 
+                          fname_pred_r, nodata=TRUE, 
+                          datatype="INT1U", overwrite=TRUE)
+        r_sieved <- gdal_sieve(srcfile = fname_pred_r,
+                               dstfile = fname_pred_rs, 
+                               st = sieve, returnRaster=TRUE)
+        pred_rm <- r_sieved[][U$validCells]==1
+        pred_rm_sum[[iter]]["sieve"] <- sum(pred_rm)
+        time_stopper_sieve <- rbind(time_stopper_sieve, (proc.time()-ans)[1:3])
+        cat("Completed in", time_stopper_sieve[iter, 3], "sec.\n")
       }
       
-      time_stopper_model <- rbind(time_stopper_model, (proc.time()-ans)[1:3])
-      save(model, time_stopper_model, file=get_fname("model", baseDir, iter=iter))
-    } else {
-      load(get_fname("model", baseDir, iter=iter))
-    }
-    cat("Completed in", time_stopper_model[iter, 3], "sec.\n")
-    
-    cat("\tPrediction ... ")
-    
-    fname_pred <- get_fname("predictions", baseDir, iter=iter)
-    if (!file.exists(fname_pred)) {
+      pred_in_pred_neg <- which(pred_neg==0)
+      new_neg_in_pred_neg <- pred_in_pred_neg[pred_rm]
+      pred_neg[ new_neg_in_pred_neg ] <- iter
       
+      n_un_all_iters[iter+1] <- n_un_all_iters[iter]-length(new_neg_in_pred_neg)
+      
+      # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+      # update U
       ans <- proc.time()
-      pred <- predict(U, model, returnRaster = FALSE, 
-                      fnameLog = iocc_filename(baseDir, iter, 
-                                               "_log_prediction.txt"))
-      time_stopper_predict <- rbind(time_stopper_predict, (proc.time()-ans)[1:3])
-      save(pred, time_stopper_predict, file=get_fname("predictions", baseDir, iter=iter))
-    } else {
-      load(file=fname_pred)
-    }
-    cat("Completed in", time_stopper_predict[iter, 3], "sec.\n")
-    
-    th <- thresholdNu(model, pred, expand=expand)
-    th_all <- c(th_all, th)
-    
-    pred_rm <- pred<th
-    pred_rm_bak <- pred_rm
-    pred_rm_sum[[iter]] <- c(th=sum(pred_rm), sieve=0)
-    
-    if (!is.null(sieve)){
-      ans <- proc.time()
-      fname_pred_r <- gsub(".RData", ".tif", fname_pred)
-      fname_pred_rs <- gsub(".RData", "_sieved.tif", fname_pred)
+      U <- rasterTiled(U$raster, 
+                       mask=U$validCells[!pred_rm], 
+                       nPixelsPerTile=nPixelsPerTile,
+                       asRData=TRUE)
+      time_stopper_writeTiles <- rbind(time_stopper_writeTiles, (proc.time()-ans)[1:3])
       
-      write_rasterTiled(U, pred_rm, # attr(th, "th_non_expanded"), 
-                        fname_pred_r, nodata=TRUE, 
-                        datatype="INT1U", overwrite=TRUE)
-      r_sieved <- gdal_sieve(srcfile = fname_pred_r,
-                             dstfile = fname_pred_rs, 
-                             st = sieve, returnRaster=TRUE)
-      pred_rm <- r_sieved[][U$validCells]==1
-      pred_rm_sum[[iter]]["sieve"] <- sum(pred_rm)
-      time_stopper_sieve <- rbind(time_stopper_sieve, (proc.time()-ans)[1:3])
-      cat("Completed in", time_stopper_sieve[iter, 3], "sec.\n")
-    }
-    
-    pred_in_pred_neg <- which(pred_neg==0)
-    new_neg_in_pred_neg <- pred_in_pred_neg[pred_rm]
-    pred_neg[ new_neg_in_pred_neg ] <- iter
-    
-    n_un_all_iters[iter+1] <- n_un_all_iters[iter]-length(new_neg_in_pred_neg)
-    
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    # update U
-    ans <- proc.time()
-    U <- rasterTiled(U$raster, 
-                     mask=U$validCells[!pred_rm], 
-                     nPixelsPerTile=nPixelsPerTile,
-                     asRData=TRUE)
-    time_stopper_writeTiles <- rbind(time_stopper_writeTiles, (proc.time()-ans)[1:3])
+      ### time
+      # time_stopper <- rbind(time_stopper, proc.time())
+      time_stopper[iter, ] <- (proc.time()-time_stopper[iter, ])
+      # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+      # Test
+      if (!is.null(PN)) {
+        cat("\tEvaluation ... ")
+        dummy <- .evaluate_iocc(model, PN, pred_neg_test, th, iter)
+        pred_test <- dummy$pred_test
+        pred_neg_test <- dummy$pred_neg_test
+        ev <- dummy$ev
+      } else {
+        pred_test <- pred_neg_test <- ev <- NULL
+      }
       
-    ### time
-    # time_stopper <- rbind(time_stopper, proc.time())
-    time_stopper[iter, ] <- (proc.time()-time_stopper[iter, ])
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    # Test
-    if (!is.null(PN)) {
-      cat("\tEvaluation ... ")
-      dummy <- .evaluate_iocc(model, PN, pred_neg_test, th, iter)
-      pred_test <- dummy$pred_test
-      pred_neg_test <- dummy$pred_neg_test
-      ev <- dummy$ev
+      ### save results of this iteration
+      save(iter, th, th_all, pred_neg, # model, pred
+           pred_rm_sum,
+           pred_test, pred_neg_test, ev, 
+           n_un_all_iters, seed, seed_iter,
+           time_stopper, time_stopper_model, time_stopper_predict,
+           file=iocc_filename(baseDir, iter, "_results.RData"))
+      
+      
+      ### plot diagnostics
+      cat("\n\tWriting results in folder ", baseDir)
+      
+      param_as_str <- .get_param_as_str(model)
+      
+      ioccObj <- .c_ioccObj(environment())
+      
+      plot_iocc(ioccObj, what="grid", 
+                outfile=iocc_filename(baseDir, iter, "_grid.pdf"))
+      plot_iocc(ioccObj, what="hist", 
+                outfile=iocc_filename(baseDir, iter, "_histogram.pdf"))
+      plot_iocc(ioccObj, what="featurespace", 
+                outfile=iocc_filename(baseDir, iter, "_featurespace.pdf"))
+      plot_iocc(ioccObj, what="eval", 
+                outfile=iocc_filename(baseDir, iter, "_eval_pn.pdf"))
+      plot_iocc(ioccObj, what="n_unlabeled", 
+                outfile=iocc_filename(baseDir, 0, "_n_unlabeled.pdf"))
+      plot_iocc(ioccObj, what="time", 
+                outfile=iocc_filename(baseDir, 0, "_time.pdf"))
+      
+      loaded = FALSE
     } else {
-      pred_test <- pred_neg_test <- ev <- NULL
+      load(iocc_filename(baseDir, iter, "_results.RData"))
+      loaded = TRUE
     }
-    
-    ### save results of this iteration
-    save(iter, th, th_all, pred_neg, # model, pred
-         pred_rm_sum,
-         pred_test, pred_neg_test, ev, 
-         n_un_all_iters, seed, seed_iter,
-         time_stopper, time_stopper_model, time_stopper_predict,
-         file=iocc_filename(baseDir, iter, "_results.RData"))
-    
-    
-    ### plot diagnostics
-    cat("\n\tWriting results in folder ", baseDir)
-    
-    param_as_str <- .get_param_as_str(model)
-    
-    ioccObj <- .c_ioccObj(environment())
-    
-    plot_iocc(ioccObj, what="grid", 
-              outfile=iocc_filename(baseDir, iter, "_grid.pdf"))
-    plot_iocc(ioccObj, what="hist", 
-              outfile=iocc_filename(baseDir, iter, "_histogram.pdf"))
-    plot_iocc(ioccObj, what="featurespace", 
-              outfile=iocc_filename(baseDir, iter, "_featurespace.pdf"))
-    plot_iocc(ioccObj, what="eval", 
-              outfile=iocc_filename(baseDir, iter, "_eval_pn.pdf"))
-    plot_iocc(ioccObj, what="n_unlabeled", 
-              outfile=iocc_filename(baseDir, 0, "_n_unlabeled.pdf"))
-    plot_iocc(ioccObj, what="time", 
-              outfile=iocc_filename(baseDir, 0, "_time.pdf"))
-    
-    loaded = FALSE
-  } else {
-    load(iocc_filename(baseDir, iter, "_results.RData"))
-    loaded = TRUE
-  }
-  if (is.character(iterMax)) {
-    # iter of no change
-    dff <- abs(diff(n_un_all_iters))
-    if (length(grep("[+]", iterMax))==1) {
-      nSeqNoChangeCrit <- as.numeric(strsplit(iterMax, "[+]")[[1]][2])
-      nSeqNoChange <- sum(dff[ max(1, iter-nSeqNoChangeCrit+1) : iter ] == 0)
-      if (nSeqNoChange >= nSeqNoChangeCrit)
+    if (is.character(iterMax)) {
+      # iter of no change
+      dff <- abs(diff(n_un_all_iters))
+      if (length(grep("[+]", iterMax))==1) {
+        nSeqNoChangeCrit <- as.numeric(strsplit(iterMax, "[+]")[[1]][2])
+        nSeqNoChange <- sum(dff[ max(1, iter-nSeqNoChangeCrit+1) : iter ] == 0)
+        if (nSeqNoChange >= nSeqNoChangeCrit)
+          STOP=TRUE
+      }
+      if ( iterMax=="noChange" & 
+             dff[iter]==0 )
         STOP=TRUE
-    }
-    if ( iterMax=="noChange" & 
-           dff[iter]==0 )
-      STOP=TRUE
-  } else if (is.numeric(iter)) {
-    if (iter==iterMax)
-      STOP = TRUE  
-  } else {
-    rm(model, pred, th, ev, seed, seed_iter, 
-       n_un_iter, train_un,
-       train_pu_x, train_pu_y)
-  }
-  if (loaded) {
-    cat(sprintf("\t%2.2f real and %2.2f CPU time required (results and time loaded saved results).",
-                time_stopper[iter, , drop=FALSE][,"elapsed"],
-                time_stopper[iter, , drop=FALSE][,"sys.self"]
-    ), "\n")
-    if (STOP) {
-      load(get_fname("model", baseDir, iter=iter))
-      load(get_fname("predictions", baseDir, iter=iter))
-    }
+    } else if (is.numeric(iter)) {
+      if (iter==iterMax)
+        STOP = TRUE  
     } else {
-    cat(sprintf("\t%2.2f real and %2.2f CPU time required.",
-                time_stopper[iter, , drop=FALSE][,"elapsed"],
-                time_stopper[iter, , drop=FALSE][,"sys.self"]
-    ), "\n")
+      rm(model, pred, th, ev, seed, seed_iter, 
+         n_un_iter, train_un,
+         train_pu_x, train_pu_y)
+    }
+    if (loaded) {
+      cat(sprintf("\t%2.2f real and %2.2f CPU time required (results and time loaded saved results).",
+                  time_stopper[iter, , drop=FALSE][,"elapsed"],
+                  time_stopper[iter, , drop=FALSE][,"sys.self"]
+      ), "\n")
+      if (STOP) {
+        load(get_fname("model", baseDir, iter=iter))
+        load(get_fname("predictions", baseDir, iter=iter))
+      }
+    } else {
+      cat(sprintf("\t%2.2f real and %2.2f CPU time required.",
+                  time_stopper[iter, , drop=FALSE][,"elapsed"],
+                  time_stopper[iter, , drop=FALSE][,"sys.self"]
+      ), "\n")
+    }
   }
-}
-gc()
-return(
-  structure(list(U = U,
-                 iter=iter, 
-                 model=model, 
-                 pred=pred, 
-                 th=th, 
-                 th_all=th_all,
-                 pred_neg=pred_neg, 
-                 pred_rm_sum=pred_rm_sum, 
-                 n_un_all_iters=n_un_all_iters,
-                 pred_neg_test=pred_neg_test, 
-                 ev=ev, 
-                 seed=seed, 
-                 seed_iter=seed_iter,
-                 time_stopper=time_stopper, 
-                 time_stopper_model=time_stopper_model, 
-                 time_stopper_predict=time_stopper_predict,
-                 time_stopper_writeTiles=time_stopper_writeTiles,
-                 time_stopper_sieve=time_stopper_sieve,
-                 baseDir=baseDir,
-                 file=iocc_filename(baseDir, iter, "_results.RData")
-  ), class = "iocc")
-)
+  gc()
+  return(
+    structure(list(U = U,
+                   iter=iter, 
+                   model=model, 
+                   pred=pred, 
+                   th=th, 
+                   th_all=th_all,
+                   pred_neg=pred_neg, 
+                   pred_rm_sum=pred_rm_sum, 
+                   n_un_all_iters=n_un_all_iters,
+                   pred_neg_test=pred_neg_test, 
+                   ev=ev, 
+                   seed=seed, 
+                   seed_iter=seed_iter,
+                   time_stopper=time_stopper, 
+                   time_stopper_model=time_stopper_model, 
+                   time_stopper_predict=time_stopper_predict,
+                   time_stopper_writeTiles=time_stopper_writeTiles,
+                   time_stopper_sieve=time_stopper_sieve,
+                   baseDir=baseDir,
+                   file=iocc_filename(baseDir, iter, "_results.RData")
+    ), class = "iocc")
+  )
 }

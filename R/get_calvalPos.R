@@ -1,4 +1,4 @@
-#' @ export
+#' @export
 get_calvalPos <- function(oc, P, modRows) {
   calval <- list()
   for (mr in modRows) {

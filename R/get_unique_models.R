@@ -20,5 +20,6 @@ get_unique_model <- function(baseDir, iters, model=NULL, subfolder=NULL) {
     cat("Iteration", i, ":", length(modRows_unique[[counter]]), 
         "/", n_all, "\n")
   }
+  names(modRows_unique) <- paste0("iter", iters)
   return(modRows_unique)
 }

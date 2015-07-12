@@ -2,7 +2,9 @@
 load_iterativeOcc <- function (baseDir, iter, u=NULL) {
 
   load(get_fname("ini", baseDir))
+  load(get_fname("model", baseDir, iter))
   load(get_fname("results", baseDir, iter))
+  load(get_fname("predictions", baseDir, iter=iter))
   
   objs <- ls()
   

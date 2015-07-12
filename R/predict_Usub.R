@@ -3,7 +3,8 @@ predict_Usub <- function(iocc, iter, unSub=5000,
                          modRows=NULL, seed=NULL, 
                          fname_image=NULL,
                          folder_suffix=NULL, 
-                         model=NULL) {
+                         model=NULL,
+                         doReturn=FALSE) {
   
   # REFACTOR: ALSO IN plot_iocc
   # - ADDED:
