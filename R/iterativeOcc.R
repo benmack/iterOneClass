@@ -161,15 +161,19 @@ iterativeOcc <- function (P, U, settings=NULL, PN=NULL,
         capture.output(print(signif(model$results, 2),
                              print.gap=3), file=fnameTab)
         
+        dir.create(iocc_filename(baseDir, iter, "/modsel"), recursive=TRUE)
         for (mr in 1:nrow(newMetrics)) {
-          dir.create(iocc_filename(baseDir, iter, "/modsel"), recursive=TRUE)
-          pdf(iocc_filename(baseDir, iter, "/modsel/", sprintf("%03d", mr), "_hist.pdf"))
-          hist(update(model, modRow=mr), th=newMetrics[mr, gsub("pnp", "th", use_pnpAt)])
-          dev.off()
+          fname_mr <- iocc_filename(baseDir, iter, "/modsel/", sprintf("%03d", mr), "_hist.pdf")
+          anstry <- try({
+            pdf(fname_mr)
+            hist(update(model, modRow=mr), th=newMetrics[mr, gsub("pnp", "th", use_pnpAt)])
+            dev.off()
+            anstry <- NULL
+          })
         }
         dummy <- signif(newMetrics, 2)
-        dummy$sel = ""
-        dummy$sel[modelPosition(model)$row] = "*"
+        dummy <- cbind(dummy, sel="") # $sel = ""
+        dummy[modelPosition(model)$row, "sel"] = "*" # $sel[modelPosition(model)$row] = "*"
         sink(iocc_filename(baseDir, iter, "/modsel/newMetrics.txt"))
         print(dummy)
         sink()
