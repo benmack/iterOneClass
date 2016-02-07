@@ -1,10 +1,11 @@
 #'@export
-get_Usub <- function(baseDir, iter, unSub, seed, folder_U) {
+get_Usub <- function(baseDir, iter, unSub, seed, folder_U, 
+                     fname_U=NULL) {
   fname <- get_fname("predU_U", baseDir, iter=iter, 
                      subfolder=folder_U)
   if ( !file.exists(fname) ) {
     if (length(unSub) == 1) {
-      iocc.iter <- get_ioccObj(baseDir, iter) 
+      iocc.iter <- get_ioccObj(baseDir, iter, fname_U) 
       U_df <- sample_rasterTiled(iocc.iter$U, unSub, seed=seed)
     } else {
       U_df <- unSub

@@ -49,7 +49,7 @@ predict_Usub <- function(iocc, iter, unSub=5000,
   
   # dir.create(outdir, recursive = TRUE, showWarnings=FALSE)
   
-  iocc.i <- get_ioccObj(baseDir, iter)
+  iocc.i <- get_ioccObj(baseDir, iter, fname_U=fname_image)
   if (!is.null(model))
     iocc.i$model <- model
   
