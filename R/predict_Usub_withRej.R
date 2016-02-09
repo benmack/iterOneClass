@@ -1,7 +1,7 @@
 #' @export
 predict_Usub_withRej <- function(iocc, iter, unSub=5000, 
                          modRows=NULL, seed=NULL, 
-                         fname_image=NULL,
+                         fname_U=NULL,
                          folder_suffix=NULL, 
                          model=NULL) {
   
@@ -12,7 +12,8 @@ predict_Usub_withRej <- function(iocc, iter, unSub=5000,
   modRow = NULL
   # - |
   if (is.character(iocc)) {
-    iocc <- get_ioccObj(iocc, iter, modRow=modRow)
+    iocc <- get_ioccObj(iocc, iter, modRow=modRow, 
+                         fname_U=fname_U)
     baseDir <- iocc$baseDir
     if (is.null(iter))
       iter <- .nIter(baseDir)
@@ -22,7 +23,8 @@ predict_Usub_withRej <- function(iocc, iter, unSub=5000,
       iter <- iocc$iter
     } else {
       if (iter != iocc$iter)
-        iocc <- get_ioccObj(iocc$baseDir, iter, modRow=modRow)
+        iocc <- get_ioccObj(iocc$baseDir, iter, modRow=modRow, 
+                         fname_U=fname_U)
     }
   }
   iocc.i <- iocc
@@ -38,8 +40,8 @@ predict_Usub_withRej <- function(iocc, iter, unSub=5000,
     nUnSub <- nrow(unSub)
   }
   
-  #   if (is.null(fname_image))
-  #     fname_image <- iocc$U$raster@file@name
+  #   if (is.null(fname_U))
+  #     fname_U <- iocc$U$raster@file@name
   if (is.null(folder_suffix))
     folder_suffix <- paste0("predU-", nUnSub, "_s", seed)
   
@@ -51,11 +53,12 @@ predict_Usub_withRej <- function(iocc, iter, unSub=5000,
   
   # dir.create(outdir, recursive = TRUE, showWarnings=FALSE)
   
-  iocc.i <- get_ioccObj(baseDir, iter)
+  iocc.i <- get_ioccObj(baseDir, iter, 
+                         fname_U=fname_U)
   if (!is.null(model_new))
     iocc.i$model <- model_new
 
-  # , filename_U=fname_image, U_as_df=FALSE  # U_as_df=TRUE for building hist with all unlabeled samples
+  # , filename_U=fname_U, U_as_df=FALSE  # U_as_df=TRUE for building hist with all unlabeled samples
   if (is.null(modRows)) {
     modRows <- 1:nrow(iocc.i$model$results)
   }
@@ -80,7 +83,8 @@ predict_Usub_withRej <- function(iocc, iter, unSub=5000,
   
   fname <- get_fname("predU_U", baseDir, iter, folder_suffix)
   
-  U_df <- get_Usub(baseDir, iter, unSub, seed, folder_suffix)
+  U_df <- get_Usub(baseDir, iter, unSub, seed, folder_suffix,
+                   fname_U=fname_U)
   
   
   .predUreject <- function(U_df, mod, th, likN, baseDir, ii, folder_suffix) {

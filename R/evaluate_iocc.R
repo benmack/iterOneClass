@@ -1,6 +1,7 @@
 #' @export
 evaluate_iocc <- function(baseDir, iters, refset, 
-                          modRows=NULL, subfolder=NULL, saveplot=TRUE) {
+                          modRows=NULL, subfolder=NULL, 
+                          saveplot=TRUE, fname_U=NULL) {
   
   if (!is.null(modRows) & !is.list(modRows))
     stop("\'modRows\' must be a named list.")
@@ -17,10 +18,14 @@ evaluate_iocc <- function(baseDir, iters, refset,
     cat("Predicting data for iteration", i, "\n")
     if (length(iters)==1 & !is.list(modRows)) {
       predict_Usub_withRej(baseDir, iter=i, unSub=refset[, -1],
-                         modRows=modRows[[iname(i)]], folder_suffix=subfolder)
+                         modRows=modRows[[iname(i)]], 
+                         folder_suffix=subfolder,
+                         fname_U=fname_U)
     } else {
       predict_Usub_withRej(baseDir, iter=i, unSub=refset[, -1],
-                         modRows=modRows[[iname(i)]], folder_suffix=subfolder)
+                         modRows=modRows[[iname(i)]], 
+                         folder_suffix=subfolder,
+                         fname_U=fname_U)
     }
   }
   
