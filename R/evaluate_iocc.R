@@ -62,7 +62,7 @@ evaluate_iocc <- function(baseDir, iters, refset,
     counter <- counter + 1
     cat("Evaluation: iteration", i, "\n")
     ev_all[[counter]] <- foreach(modRow = modRows[[iname(i)]],
-              .packages=c("dismo"), .verbose=FALSE) %dopar% 
+              .packages=c("dismo"), .verbose=FALSE) %do% 
       .evaluate(baseDir, i, modRow, subfolder, refset$y, saveplot)
     names(ev_all[[counter]]) <- paste0("modRow", modRows[[iname(i)]])
   }
